@@ -59,6 +59,8 @@ class ShadeService : Service() {
         const val NOTIFICATION_ID = 1001
         const val ACTION_OPEN_SHADE = "com.supershade.action.OPEN_SHADE"
         const val EXTRA_EXPAND_QS = "expand_qs"
+        @Volatile var isRunning: Boolean = false
+            private set
     }
 
     // ---------------------------------------------------------------------------
@@ -67,6 +69,7 @@ class ShadeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
@@ -90,10 +93,11 @@ class ShadeService : Service() {
             }
             .launchIn(scope)
 
-        // Show peek cards for new notifications when the shade panel is closed.
+        // Show peek cards for new notifications when the shade panel is closed
+        // and AccessibilityService is not already handling them.
         notificationRepo.newNotifications
             .onEach { notification ->
-                if (!shadeViewModel.state.value.isOpen) {
+                if (!SuperShadeAccessibilityService.isRunningFlow.value && !shadeViewModel.state.value.isOpen) {
                     headsUpOverlay.show(notification)
                 }
             }
@@ -123,12 +127,14 @@ class ShadeService : Service() {
         .launchIn(scope)
 
         // Observe isOpen state from ViewModel so opening shade from any component
-        // presents the overlay window.
+        // presents the overlay window when AccessibilityService is not already doing so.
         shadeViewModel.state
             .map { it.isOpen }
             .distinctUntilChanged()
             .onEach { isOpen ->
-                if (isOpen) windowManager.show() else windowManager.hide()
+                if (!SuperShadeAccessibilityService.isRunningFlow.value) {
+                    if (isOpen) windowManager.show() else windowManager.hide()
+                }
             }
             .launchIn(scope)
 
@@ -166,16 +172,15 @@ class ShadeService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         gestureOverlay?.detach()
         gestureOverlay = null
         headsUpOverlay.destroy()
         windowManager.hide()
 
-        // Re-enable the native system status bar synchronously before unbinding service.
-        governor.enableExpansionBlocking()
+        // Re-enable the native system status bar asynchronously on IO and unbind UserService.
+        governor.restoreSystemStatusBarAsync(unbindAfter = true)
 
-        // Tear down the Shizuku UserService and clean up binder listeners.
-        governor.unbindService()
         connector.cleanup()
         scope.cancel()
     }

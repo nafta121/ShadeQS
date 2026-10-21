@@ -45,6 +45,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.TransformOrigin
@@ -317,16 +318,17 @@ fun ShadeRoot(
                     Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> (opacity * 0.36f).coerceIn(0.12f, 0.45f)
                     else -> (opacity * 0.65f).coerceIn(0.25f, 0.75f)
                 }
-                val dragFraction = (kotlin.math.abs(dragOffset.value) / screenHeightPx).coerceIn(0f, 1f)
-                // One UI 9 cosine scrim attenuation curve: preserves visual focus before wallpaper reveal
-                val cosineFactor = kotlin.math.cos((Math.PI / 2.0) * Math.pow(dragFraction.toDouble(), 1.35)).toFloat()
-                val liveScrimAlpha = (baseScrimAlpha * cosineFactor * cosineFactor).coerceIn(0f, 1f)
-                val panelScale = (1f - 0.075f * Math.pow(dragFraction.toDouble(), 1.25).toFloat()).coerceIn(0.92f, 1f)
 
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = liveScrimAlpha))
+                        .drawBehind {
+                            val dragFraction = (kotlin.math.abs(dragOffset.value) / screenHeightPx).coerceIn(0f, 1f)
+                            // One UI 9 cosine scrim attenuation curve: evaluated in Draw phase to avoid recomposition
+                            val cosineFactor = kotlin.math.cos((Math.PI / 2.0) * Math.pow(dragFraction.toDouble(), 1.35)).toFloat()
+                            val liveScrimAlpha = (baseScrimAlpha * cosineFactor * cosineFactor).coerceIn(0f, 1f)
+                            drawRect(Color.Black.copy(alpha = liveScrimAlpha))
+                        }
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -362,6 +364,8 @@ fun ShadeRoot(
                             .fillMaxSize()
                             .offset { IntOffset(0, dragOffset.value.roundToInt()) }
                             .graphicsLayer {
+                                val dragFraction = (kotlin.math.abs(dragOffset.value) / screenHeightPx).coerceIn(0f, 1f)
+                                val panelScale = (1f - 0.075f * Math.pow(dragFraction.toDouble(), 1.25).toFloat()).coerceIn(0.92f, 1f)
                                 scaleX = panelScale
                                 scaleY = panelScale
                                 transformOrigin = TransformOrigin(0.5f, 0f)

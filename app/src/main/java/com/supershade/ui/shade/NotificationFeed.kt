@@ -680,6 +680,153 @@ fun EmptySearchResultView(
 }
 
 @Composable
+private fun rememberMinuteTicker(): Long {
+    val now by androidx.compose.runtime.produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000L)
+            value = System.currentTimeMillis()
+        }
+    }
+    return now
+}
+
+private fun filterNotificationsByQuery(
+    notifications: List<ShadeNotification>,
+    searchQuery: String,
+): List<ShadeNotification> {
+    if (searchQuery.isBlank()) return notifications
+    val q = searchQuery.trim().lowercase()
+    return notifications.filter { notif ->
+        notif.title.lowercase().contains(q) ||
+            notif.text.lowercase().contains(q) ||
+            notif.subText?.lowercase()?.contains(q) == true ||
+            notif.packageName.lowercase().contains(q) ||
+            notif.category.name.lowercase().contains(q) ||
+            notif.actions.any { it.label.lowercase().contains(q) }
+    }
+}
+
+@Composable
+private fun NotificationFeedHeaderRow(
+    totalCount: Int,
+    filteredCount: Int,
+    clearableFiltered: List<ShadeNotification>,
+    searchQuery: String,
+    isSearchExpanded: Boolean,
+    onToggleSearch: () -> Unit,
+    onOpenHistory: () -> Unit,
+    onDismiss: (String) -> Unit,
+    onClearAll: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val haptics = LocalSuperHaptics.current ?: remember(context) { com.supershade.haptics.SuperHaptics(context) }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val countText = if (searchQuery.isNotBlank()) {
+            "$filteredCount of $totalCount notification${if (totalCount != 1) "s" else ""}"
+        } else {
+            "$totalCount notification${if (totalCount != 1) "s" else ""}"
+        }
+        Text(
+            text = countText,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HeaderActionButton(
+                icon = Icons.Default.Search,
+                label = "Search",
+                isPrimary = isSearchExpanded,
+                onClick = {
+                    haptics.sheetDetent()
+                    onToggleSearch()
+                },
+            )
+            HeaderActionButton(
+                icon = Icons.Default.History,
+                label = "History",
+                onClick = {
+                    haptics.sheetDetent()
+                    onOpenHistory()
+                },
+            )
+            if (clearableFiltered.isNotEmpty()) {
+                val clearLabel = if (searchQuery.isNotBlank()) {
+                    "Clear (${clearableFiltered.size})"
+                } else {
+                    "Clear all"
+                }
+                HeaderActionButton(
+                    icon = Icons.Default.ClearAll,
+                    label = clearLabel,
+                    isPrimary = true,
+                    onClick = {
+                        haptics.sheetDetent()
+                        if (searchQuery.isNotBlank()) {
+                            clearableFiltered.forEach { onDismiss(it.key) }
+                        } else {
+                            onClearAll()
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationGroupItem(
+    group: NotificationGroup,
+    onDismiss: (String) -> Unit,
+    onNotificationClick: (ShadeNotification) -> Unit,
+    onSnooze: (String, Long) -> Unit,
+    onHideChannel: (pkg: String, channelId: String) -> Unit,
+    pinnedKeys: Set<String>,
+    onTogglePin: (String) -> Unit,
+    compact: Boolean,
+    onReply: (ShadeNotification, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (group.isStacked) {
+        GroupedNotificationCard(
+            group = group,
+            onDismissGroup = { group.notifications.forEach { onDismiss(it.key) } },
+            onDismiss = onDismiss,
+            onNotificationClick = onNotificationClick,
+            onSnooze = onSnooze,
+            onHideChannel = onHideChannel,
+            pinnedKeys = pinnedKeys,
+            onTogglePin = onTogglePin,
+            compact = compact,
+            onReply = onReply,
+            modifier = modifier,
+        )
+    } else {
+        val notification = group.preview
+        NotificationCard(
+            notification = notification,
+            onDismiss = { onDismiss(notification.key) },
+            onClick = { onNotificationClick(notification) },
+            onSnooze = { delayMs -> onSnooze(notification.key, delayMs) },
+            onHideChannel = onHideChannel,
+            isPinned = notification.key in pinnedKeys,
+            onTogglePin = { onTogglePin(notification.key) },
+            compact = compact,
+            onReply = onReply,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
 fun NotificationFeed(
     notifications: List<ShadeNotification>,
     onDismiss: (String) -> Unit,
@@ -695,7 +842,6 @@ fun NotificationFeed(
     onReply: (ShadeNotification, String) -> Unit = { _, _ -> },
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val haptics = LocalSuperHaptics.current ?: remember(context) { com.supershade.haptics.SuperHaptics(context) }
     val isAccessGranted = remember(context) {
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     }
@@ -709,20 +855,9 @@ fun NotificationFeed(
     } else if (notifications.isEmpty()) {
         EmptyNotificationsView(modifier = modifier, onOpenHistory = onOpenHistory)
     } else {
+        val nowMs = rememberMinuteTicker()
         val filteredNotifications = remember(notifications, searchQuery) {
-            if (searchQuery.isBlank()) {
-                notifications
-            } else {
-                val q = searchQuery.trim().lowercase()
-                notifications.filter { notif ->
-                    notif.title.lowercase().contains(q) ||
-                    notif.text.lowercase().contains(q) ||
-                    notif.subText?.lowercase()?.contains(q) == true ||
-                    notif.packageName.lowercase().contains(q) ||
-                    notif.category.name.lowercase().contains(q) ||
-                    notif.actions.any { it.label.lowercase().contains(q) }
-                }
-            }
+            filterNotificationsByQuery(notifications, searchQuery)
         }
         val groups = remember(filteredNotifications) { filteredNotifications.toGroups() }
         val sections = remember(groups, pinnedKeys, shadeTheme) {
@@ -732,115 +867,67 @@ fun NotificationFeed(
             filteredNotifications.filter { it.isClearable && it.key !in pinnedKeys }
         }
 
-        LazyColumn(
-            modifier = modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = if (compact) 4.dp else 6.dp, bottom = 68.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp),
-        ) {
-            item(key = "feed_header_row") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val countText = if (searchQuery.isNotBlank()) {
-                        "${filteredNotifications.size} of ${notifications.size} notification${if (notifications.size != 1) "s" else ""}"
-                    } else {
-                        "${notifications.size} notification${if (notifications.size != 1) "s" else ""}"
-                    }
-                    Text(
-                        text = countText,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        androidx.compose.runtime.CompositionLocalProvider(LocalCurrentTimeMillis provides nowMs) {
+            LazyColumn(
+                modifier = modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = if (compact) 4.dp else 6.dp, bottom = 68.dp),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp),
+            ) {
+                item(key = "feed_header_row", contentType = "header") {
+                    NotificationFeedHeaderRow(
+                        totalCount = notifications.size,
+                        filteredCount = filteredNotifications.size,
+                        clearableFiltered = clearableFiltered,
+                        searchQuery = searchQuery,
+                        isSearchExpanded = isSearchExpanded,
+                        onToggleSearch = {
+                            isSearchExpanded = !isSearchExpanded
+                            if (!isSearchExpanded) searchQuery = ""
+                        },
+                        onOpenHistory = onOpenHistory,
+                        onDismiss = onDismiss,
+                        onClearAll = onClearAll,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        HeaderActionButton(
-                            icon = Icons.Default.Search,
-                            label = "Search",
-                            isPrimary = isSearchExpanded,
-                            onClick = {
-                                haptics.sheetDetent()
-                                isSearchExpanded = !isSearchExpanded
-                                if (!isSearchExpanded) searchQuery = ""
-                            },
-                        )
+                }
 
-                        HeaderActionButton(
-                            icon = Icons.Default.History,
-                            label = "History",
-                            onClick = {
-                                haptics.sheetDetent()
-                                onOpenHistory()
+                if (isSearchExpanded) {
+                    item(key = "feed_search_bar", contentType = "search_bar") {
+                        NotificationFeedSearchBar(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            onClose = {
+                                isSearchExpanded = false
+                                searchQuery = ""
                             },
+                            theme = shadeTheme,
+                            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
                         )
+                    }
+                }
 
-                        if (clearableFiltered.isNotEmpty()) {
-                            val clearLabel = if (searchQuery.isNotBlank()) {
-                                "Clear (${clearableFiltered.size})"
-                            } else {
-                                "Clear all"
-                            }
-                            HeaderActionButton(
-                                icon = Icons.Default.ClearAll,
-                                label = clearLabel,
-                                isPrimary = true,
-                                onClick = {
-                                    haptics.sheetDetent()
-                                    if (searchQuery.isNotBlank()) {
-                                        clearableFiltered.forEach { onDismiss(it.key) }
-                                    } else {
-                                        onClearAll()
-                                    }
-                                },
-                            )
+                if (filteredNotifications.isEmpty() && searchQuery.isNotBlank()) {
+                    item(key = "feed_search_empty", contentType = "search_empty") {
+                        EmptySearchResultView(
+                            query = searchQuery,
+                            onClearQuery = { searchQuery = "" },
+                        )
+                    }
+                }
+
+                sections.forEach { section ->
+                    if (sections.size > 1 || section.type == FeedSectionType.PINNED || section.type == FeedSectionType.CONVERSATIONS) {
+                        item(key = "section_header_${section.type.name}", contentType = "section_header") {
+                            FeedSectionHeader(section = section, theme = shadeTheme)
                         }
                     }
-                }
-            }
-
-            if (isSearchExpanded) {
-                item(key = "feed_search_bar") {
-                    NotificationFeedSearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onClose = {
-                            isSearchExpanded = false
-                            searchQuery = ""
-                        },
-                        theme = shadeTheme,
-                        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp),
-                    )
-                }
-            }
-
-            if (filteredNotifications.isEmpty() && searchQuery.isNotBlank()) {
-                item(key = "feed_search_empty") {
-                    EmptySearchResultView(
-                        query = searchQuery,
-                        onClearQuery = { searchQuery = "" },
-                    )
-                }
-            }
-
-            sections.forEach { section ->
-                if (sections.size > 1 || section.type == FeedSectionType.PINNED || section.type == FeedSectionType.CONVERSATIONS) {
-                    item(key = "section_header_${section.type.name}") {
-                        FeedSectionHeader(section = section, theme = shadeTheme)
-                    }
-                }
-                items(
-                    items = section.groups,
-                    key = { "${it.packageName}::${it.groupKey.orEmpty()}::${section.type.name}" },
-                ) { group ->
-                    if (group.isStacked) {
-                        GroupedNotificationCard(
+                    items(
+                        items = section.groups,
+                        key = { "${it.packageName}::${it.groupKey.orEmpty()}::${section.type.name}" },
+                        contentType = { if (it.isStacked) "stacked_group" else "single_notification" },
+                    ) { group ->
+                        NotificationGroupItem(
                             group = group,
-                            onDismissGroup = { group.notifications.forEach { onDismiss(it.key) } },
                             onDismiss = onDismiss,
                             onNotificationClick = onNotificationClick,
                             onSnooze = onSnooze,
@@ -851,25 +938,11 @@ fun NotificationFeed(
                             onReply = onReply,
                             modifier = Modifier.animateItem(),
                         )
-                    } else {
-                        val notification = group.preview
-                        NotificationCard(
-                            notification = notification,
-                            onDismiss = { onDismiss(notification.key) },
-                            onClick = { onNotificationClick(notification) },
-                            onSnooze = { delayMs -> onSnooze(notification.key, delayMs) },
-                            onHideChannel = onHideChannel,
-                            isPinned = notification.key in pinnedKeys,
-                            onTogglePin = { onTogglePin(notification.key) },
-                            compact = compact,
-                            onReply = onReply,
-                            modifier = Modifier.animateItem(),
-                        )
                     }
                 }
-            }
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
+                item(key = "feed_bottom_spacer", contentType = "spacer") {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
         }
     }
@@ -895,8 +968,6 @@ fun TogetherNotificationFeed(
     onReply: (ShadeNotification, String) -> Unit = { _, _ -> },
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val haptics = LocalSuperHaptics.current ?: remember(context) { com.supershade.haptics.SuperHaptics(context) }
-
     val isAccessGranted = remember(context) {
         NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
     }
@@ -909,21 +980,10 @@ fun TogetherNotificationFeed(
     } else if (notifications.isEmpty()) {
         EmptyNotificationsView(modifier = modifier, onOpenHistory = onOpenHistory)
     } else {
+        val nowMs = rememberMinuteTicker()
         val shadeTheme = LocalShadeTheme.current
         val filteredNotifications = remember(notifications, searchQuery) {
-            if (searchQuery.isBlank()) {
-                notifications
-            } else {
-                val q = searchQuery.trim().lowercase()
-                notifications.filter { notif ->
-                    notif.title.lowercase().contains(q) ||
-                    notif.text.lowercase().contains(q) ||
-                    notif.subText?.lowercase()?.contains(q) == true ||
-                    notif.packageName.lowercase().contains(q) ||
-                    notif.category.name.lowercase().contains(q) ||
-                    notif.actions.any { it.label.lowercase().contains(q) }
-                }
-            }
+            filterNotificationsByQuery(notifications, searchQuery)
         }
         val groups = remember(filteredNotifications) { filteredNotifications.toGroups() }
         val sections = remember(groups, pinnedKeys, shadeTheme) {
@@ -933,113 +993,62 @@ fun TogetherNotificationFeed(
             filteredNotifications.filter { it.isClearable && it.key !in pinnedKeys }
         }
 
-        Column(
-            modifier = modifier
-                .fillMaxWidth()
-                .animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    )
-                ),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp),
-        ) {
-            // Header row
-            Row(
-                modifier = Modifier
+        androidx.compose.runtime.CompositionLocalProvider(LocalCurrentTimeMillis provides nowMs) {
+            Column(
+                modifier = modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val countText = if (searchQuery.isNotBlank()) {
-                    "${filteredNotifications.size} of ${notifications.size} notification${if (notifications.size != 1) "s" else ""}"
-                } else {
-                    "${notifications.size} notification${if (notifications.size != 1) "s" else ""}"
-                }
-                Text(
-                    text = countText,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    HeaderActionButton(
-                        icon = Icons.Default.Search,
-                        label = "Search",
-                        isPrimary = isSearchExpanded,
-                        onClick = {
-                            haptics.sheetDetent()
-                            isSearchExpanded = !isSearchExpanded
-                            if (!isSearchExpanded) searchQuery = ""
-                        },
-                    )
-
-                    HeaderActionButton(
-                        icon = Icons.Default.History,
-                        label = "History",
-                        onClick = {
-                            haptics.sheetDetent()
-                            onOpenHistory()
-                        },
-                    )
-
-                    if (clearableFiltered.isNotEmpty()) {
-                        val clearLabel = if (searchQuery.isNotBlank()) {
-                            "Clear (${clearableFiltered.size})"
-                        } else {
-                            "Clear all"
-                        }
-                        HeaderActionButton(
-                            icon = Icons.Default.ClearAll,
-                            label = clearLabel,
-                            isPrimary = true,
-                            onClick = {
-                                haptics.sheetDetent()
-                                if (searchQuery.isNotBlank()) {
-                                    clearableFiltered.forEach { onDismiss(it.key) }
-                                } else {
-                                    onClearAll()
-                                }
-                            },
+                    .animateContentSize(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
                         )
-                    }
-                }
-            }
-
-            if (isSearchExpanded) {
-                NotificationFeedSearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onClose = {
-                        isSearchExpanded = false
-                        searchQuery = ""
+                    ),
+                verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp),
+            ) {
+                NotificationFeedHeaderRow(
+                    totalCount = notifications.size,
+                    filteredCount = filteredNotifications.size,
+                    clearableFiltered = clearableFiltered,
+                    searchQuery = searchQuery,
+                    isSearchExpanded = isSearchExpanded,
+                    onToggleSearch = {
+                        isSearchExpanded = !isSearchExpanded
+                        if (!isSearchExpanded) searchQuery = ""
                     },
-                    theme = shadeTheme,
+                    onOpenHistory = onOpenHistory,
+                    onDismiss = onDismiss,
+                    onClearAll = onClearAll,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
                 )
-            }
 
-            if (filteredNotifications.isEmpty() && searchQuery.isNotBlank()) {
-                EmptySearchResultView(
-                    query = searchQuery,
-                    onClearQuery = { searchQuery = "" },
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                )
-            }
-
-            // Notification groups organized by sections (Column, not LazyColumn)
-            sections.forEach { section ->
-                if (sections.size > 1 || section.type == FeedSectionType.PINNED || section.type == FeedSectionType.CONVERSATIONS) {
-                    FeedSectionHeader(section = section, theme = shadeTheme)
+                if (isSearchExpanded) {
+                    NotificationFeedSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onClose = {
+                            isSearchExpanded = false
+                            searchQuery = ""
+                        },
+                        theme = shadeTheme,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp),
+                    )
                 }
-                section.groups.forEach { group ->
-                    if (group.isStacked) {
-                        GroupedNotificationCard(
+
+                if (filteredNotifications.isEmpty() && searchQuery.isNotBlank()) {
+                    EmptySearchResultView(
+                        query = searchQuery,
+                        onClearQuery = { searchQuery = "" },
+                        modifier = Modifier.padding(horizontal = 18.dp),
+                    )
+                }
+
+                sections.forEach { section ->
+                    if (sections.size > 1 || section.type == FeedSectionType.PINNED || section.type == FeedSectionType.CONVERSATIONS) {
+                        FeedSectionHeader(section = section, theme = shadeTheme)
+                    }
+                    section.groups.forEach { group ->
+                        NotificationGroupItem(
                             group = group,
-                            onDismissGroup = { group.notifications.forEach { onDismiss(it.key) } },
                             onDismiss = onDismiss,
                             onNotificationClick = onNotificationClick,
                             onSnooze = onSnooze,
@@ -1049,24 +1058,11 @@ fun TogetherNotificationFeed(
                             compact = compact,
                             onReply = onReply,
                         )
-                    } else {
-                        val notification = group.preview
-                        NotificationCard(
-                            notification = notification,
-                            onDismiss = { onDismiss(notification.key) },
-                            onClick = { onNotificationClick(notification) },
-                            onSnooze = { delayMs -> onSnooze(notification.key, delayMs) },
-                            onHideChannel = onHideChannel,
-                            isPinned = notification.key in pinnedKeys,
-                            onTogglePin = { onTogglePin(notification.key) },
-                            compact = compact,
-                            onReply = onReply,
-                        )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(72.dp))
+                Spacer(modifier = Modifier.height(72.dp))
+            }
         }
     }
 }

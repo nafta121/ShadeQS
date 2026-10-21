@@ -4,6 +4,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 import com.supershade.domain.notification.OtpDetector
+import com.supershade.domain.notification.model.ShadeCategory
+import com.supershade.domain.notification.model.ShadeNotification
 import com.supershade.domain.tile.canonicalTileId
 import com.supershade.domain.tile.humanizeTileLabel
 import com.supershade.domain.update.UpdateInfo
@@ -13,6 +15,7 @@ import com.supershade.ui.theme.DarkThemeMode
 import com.supershade.ui.theme.ShadeShapeScheme
 import com.supershade.ui.theme.ShadeTheme
 import com.supershade.ui.theme.withCustomAccent
+import com.supershade.viewmodel.filterNotificationsForCategory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -75,5 +78,44 @@ class DomainLogicTest {
         assertEquals(Color(0xFF10141A), lightGalaxy.onPrimaryContainer)
         assertTrue(DarkThemeMode.AMOLED.isDark(systemInDark = false))
         assertFalse(DarkThemeMode.LIGHT.isDark(systemInDark = true))
+    }
+
+    @Test
+    fun categoryFilter_preservesHideOngoingAndHiddenChannels() {
+        val ongoingSilent = ShadeNotification(
+            key = "k1",
+            packageName = "com.vpn.app",
+            title = "VPN Connected",
+            text = "Active",
+            subText = null,
+            postTime = 1000L,
+            isOngoing = true,
+            isClearable = false,
+            category = ShadeCategory.Silent,
+            channelId = "vpn_status",
+        )
+        val normalSilent = ongoingSilent.copy(
+            key = "k2",
+            isOngoing = false,
+            isClearable = true,
+            channelId = "promo",
+        )
+        val items = listOf(ongoingSilent, normalSilent)
+
+        val visibleWhenHiddenOngoing = filterNotificationsForCategory(
+            notifications = items,
+            category = ShadeCategory.Silent,
+            hiddenChannels = emptySet(),
+            hideOngoing = true,
+        )
+        assertEquals(listOf(normalSilent), visibleWhenHiddenOngoing)
+
+        val visibleWhenChannelMuted = filterNotificationsForCategory(
+            notifications = items,
+            category = ShadeCategory.Silent,
+            hiddenChannels = setOf("com.vpn.app/promo"),
+            hideOngoing = true,
+        )
+        assertTrue(visibleWhenChannelMuted.isEmpty())
     }
 }

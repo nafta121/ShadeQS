@@ -1,39 +1,18 @@
 # SuperShade ProGuard rules
 
-# Koin — keep generated metadata
--keepnames class com.supershade.** { *; }
-
-# Shizuku
+# Shizuku & cross-process UserService bound by class name
 -keep class rikka.shizuku.** { *; }
 -keep class moe.shizuku.** { *; }
+-keep class com.supershade.shizuku.ShadeCommanderService { *; }
+-keep class com.supershade.shizuku.IShadeCommander* { *; }
 
 # HiddenApiBypass
 -keep class org.lsposed.hiddenapibypass.** { *; }
 
-# Sentry — keep stack traces readable
--keepattributes *Annotation*
--keepattributes SourceFile,LineNumberTable
--keep public class * extends java.lang.Exception
--keep class io.sentry.** { *; }
-
-# DataStore
--keep class androidx.datastore.** { *; }
-
-# Kotlin serialization
--keepattributes *Annotation*, InnerClasses
+# Keep stack trace line numbers and Kotlin serialization metadata
+-keepattributes *Annotation*, InnerClasses, SourceFile, LineNumberTable
 -dontnote kotlinx.serialization.AnnotationsKt
 -keepclassmembers class kotlinx.serialization.json.** { *** Companion; }
 -keepclasseswithmembers class **$$serializer {
     static **$$serializer INSTANCE;
 }
-
-# Compose runtime
--keep class androidx.compose.runtime.** { *; }
-
-# Application entry point
--keep class com.supershade.SuperShadeApplication { *; }
--keep class com.supershade.MainActivity { *; }
--keep class com.supershade.service.** { *; }
-
-# Keep all Koin module declarations
--keep class com.supershade.di.** { *; }

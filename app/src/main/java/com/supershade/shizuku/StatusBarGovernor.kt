@@ -26,6 +26,7 @@ class StatusBarGovernor(
     val canRunPrivileged: Boolean get() = _isCommanderConnected.value || connector.hasPermission()
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val mainScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val serviceArgs: Shizuku.UserServiceArgs get() {
         val ver = try {
@@ -67,7 +68,7 @@ class StatusBarGovernor(
                     if (shouldDisableExpansion) disableExpansion()
                 }
             }
-            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Main))
+            .launchIn(mainScope)
 
         connector.hasPermissionFlow
             .onEach { granted ->
@@ -76,7 +77,7 @@ class StatusBarGovernor(
                     if (shouldDisableExpansion) disableExpansion()
                 }
             }
-            .launchIn(CoroutineScope(SupervisorJob() + Dispatchers.Main))
+            .launchIn(mainScope)
     }
 
     fun bindService() {
@@ -115,14 +116,28 @@ class StatusBarGovernor(
         }
     }
 
+    private fun java.lang.Process.waitForBounded(timeoutSec: Long = 5L): Boolean {
+        return try {
+            try { errorStream.close() } catch (_: Exception) {}
+            if (waitFor(timeoutSec, java.util.concurrent.TimeUnit.SECONDS)) {
+                exitValue() == 0
+            } else {
+                destroyForcibly()
+                false
+            }
+        } catch (_: Exception) {
+            destroyForcibly()
+            false
+        }
+    }
+
     suspend fun runShell(vararg args: String): Boolean = withContext(Dispatchers.IO) {
         try {
             if (!connector.hasPermission()) return@withContext false
             val cmd = Array(args.size) { args[it] }
             val direct = commander?.exec(cmd)
             if (direct != null) return@withContext direct
-            val proc = executeShizukuProcess(cmd)
-            proc?.waitFor() == 0
+            executeShizukuProcess(cmd)?.waitForBounded() == true
         } catch (e: Exception) { false }
     }
 
@@ -132,9 +147,10 @@ class StatusBarGovernor(
             val cmd = Array(args.size) { args[it] }
             val direct = commander?.execForOutput(cmd)
             if (!direct.isNullOrEmpty()) return@withContext direct
-            val proc = executeShizukuProcess(cmd)
-            val output = proc?.inputStream?.bufferedReader()?.use { it.readText() }?.trim().orEmpty()
-            proc?.waitFor()
+            val proc = executeShizukuProcess(cmd) ?: return@withContext ""
+            try { proc.errorStream.close() } catch (_: Exception) {}
+            val output = proc.inputStream.bufferedReader().use { it.readText() }.trim()
+            proc.waitForBounded()
             output
         } catch (e: Exception) { "" }
     }
@@ -145,9 +161,23 @@ class StatusBarGovernor(
             val cmd = Array(args.size) { args[it] }
             val direct = commander?.exec(cmd)
             if (direct != null) return direct
-            val proc = executeShizukuProcess(cmd)
-            proc?.waitFor() == 0
+            executeShizukuProcess(cmd)?.waitForBounded(2L) == true
         } catch (e: Exception) { false }
+    }
+
+    /**
+     * Non-blocking status-bar restoration safe to call from [android.app.Service.onDestroy]
+     * on the Main Thread without risking an ANR.
+     */
+    fun restoreSystemStatusBarAsync(unbindAfter: Boolean = false) {
+        shouldDisableExpansion = false
+        serviceScope.launch {
+            try {
+                restoreSystemStatusBar()
+            } finally {
+                if (unbindAfter) unbindService()
+            }
+        }
     }
 
     suspend fun disableExpansion(): Boolean {

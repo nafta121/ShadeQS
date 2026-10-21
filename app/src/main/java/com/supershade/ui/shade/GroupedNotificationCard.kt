@@ -126,24 +126,15 @@ fun GroupedNotificationCard(
     val context = LocalContext.current
     val haptics = LocalSuperHaptics.current ?: remember(context) { com.supershade.haptics.SuperHaptics(context) }
 
-    val appName = remember(group.packageName) {
-        try {
-            val info = context.packageManager.getApplicationInfo(group.packageName, 0)
-            context.packageManager.getApplicationLabel(info).toString()
-        } catch (_: Exception) {
-            group.packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-        }
-    }
-
-    val appIconBitmap by produceState<ImageBitmap?>(null, group.packageName) {
+    val appMeta by produceState(
+        initialValue = AppMetaCache.fallbackName(group.packageName) to AppMetaCache.cachedIcon(group.packageName),
+        key1 = group.packageName,
+    ) {
         value = withContext(Dispatchers.IO) {
-            try {
-                context.packageManager.getApplicationIcon(group.packageName)
-                    .toBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-                    .asImageBitmap()
-            } catch (_: Exception) { null }
+            AppMetaCache.resolve(context, group.packageName)
         }
     }
+    val (appName, appIconBitmap) = appMeta
 
     val swipeState = rememberFluidSwipeState(key = group.groupKey ?: group.packageName)
 

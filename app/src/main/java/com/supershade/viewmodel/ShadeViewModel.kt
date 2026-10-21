@@ -332,7 +332,12 @@ class ShadeViewModel(
         _state.update { current ->
             current.copy(
                 selectedCategory = category,
-                visibleNotifications = filterFor(current.allNotifications, category, current.hiddenChannels)
+                visibleNotifications = filterFor(
+                    current.allNotifications,
+                    category,
+                    current.hiddenChannels,
+                    current.hideOngoingNotifications,
+                )
             )
         }
     }
@@ -956,15 +961,23 @@ class ShadeViewModel(
         category: ShadeCategory,
         hiddenChannels: Set<String> = _state.value.hiddenChannels,
         hideOngoing: Boolean = _state.value.hideOngoingNotifications,
-    ): List<com.supershade.domain.notification.model.ShadeNotification> {
-        val byOngoing = if (hideOngoing) notifications.filter { !it.isOngoing } else notifications
-        val byCategory = if (category == ShadeCategory.All) byOngoing
-            else byOngoing.filter { it.category == category }
-        if (hiddenChannels.isEmpty()) return byCategory
-        return byCategory.filter { n ->
-            val channelKey = "${n.packageName}/${n.channelId.orEmpty()}"
-            val pkgKey = n.packageName
-            channelKey !in hiddenChannels && pkgKey !in hiddenChannels
-        }
+    ): List<com.supershade.domain.notification.model.ShadeNotification> =
+        filterNotificationsForCategory(notifications, category, hiddenChannels, hideOngoing)
+}
+
+internal fun filterNotificationsForCategory(
+    notifications: List<com.supershade.domain.notification.model.ShadeNotification>,
+    category: ShadeCategory,
+    hiddenChannels: Set<String>,
+    hideOngoing: Boolean,
+): List<com.supershade.domain.notification.model.ShadeNotification> {
+    val byOngoing = if (hideOngoing) notifications.filter { !it.isOngoing } else notifications
+    val byCategory = if (category == ShadeCategory.All) byOngoing
+        else byOngoing.filter { it.category == category }
+    if (hiddenChannels.isEmpty()) return byCategory
+    return byCategory.filter { n ->
+        val channelKey = "${n.packageName}/${n.channelId.orEmpty()}"
+        val pkgKey = n.packageName
+        channelKey !in hiddenChannels && pkgKey !in hiddenChannels
     }
 }

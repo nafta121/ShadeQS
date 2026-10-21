@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.CompositionLocalProvider
 import com.supershade.haptics.LocalSuperHaptics
 import com.supershade.haptics.SuperHaptics
@@ -65,38 +66,38 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
             val lifecycleOwner = LocalLifecycleOwner.current
 
-            val shizukuConnected by connector.isConnected.collectAsState()
-            val theme by settings.theme.collectAsState(initial = ShadeTheme.OneUI)
-            val darkThemeMode by settings.darkThemeMode.collectAsState(initial = com.supershade.ui.theme.DarkThemeMode.SYSTEM)
-            val accentColor by settings.accentColor.collectAsState(initial = com.supershade.settings.AccentColor.GALAXY_BLUE)
-            val monetAccentStrength by settings.monetAccentStrength.collectAsState(initial = 1.0f)
-            val backdropTheme by settings.backdropTheme.collectAsState(initial = BackdropTheme.FROSTED_GLASS)
-            val backdropOpacity by settings.backdropOpacity.collectAsState(initial = 0.78f)
-            val notificationDensity by settings.notificationDensity.collectAsState(initial = com.supershade.settings.NotificationDensity.BALANCED)
-            val isActive by settings.isActive.collectAsState(initial = false)
-            val blockSystemShade by settings.blockSystemShade.collectAsState(initial = true)
-            val tileShape by settings.tileShape.collectAsState(initial = com.supershade.settings.TileShape.SQUIRCLE)
-            val tileSize by settings.tileSize.collectAsState(initial = com.supershade.settings.TileSize.STANDARD)
-            val tileColumns by settings.tileColumns.collectAsState(initial = com.supershade.settings.TileGridColumns.STANDARD)
-            val showWideCards by settings.showWideCards.collectAsState(initial = true)
-            val splitGestureMode by settings.splitGestureMode.collectAsState(initial = com.supershade.settings.SplitGestureMode.SEPARATE_70_30)
-            val showPanelSwitcherPill by settings.showPanelSwitcherPill.collectAsState(initial = false)
-            val cardBorderWidth by settings.cardBorderWidth.collectAsState(initial = com.supershade.settings.CardBorderWidth.THIN)
-            val hiddenChannels by settings.hiddenChannels.collectAsState(initial = emptySet())
-            val hideOngoingNotifications by settings.hideOngoingNotifications.collectAsState(initial = false)
-            val ambientMediaWidgetEnabled by settings.ambientMediaWidgetEnabled.collectAsState(initial = true)
-            val deviceControlMode by settings.deviceControlMode.collectAsState(initial = com.supershade.settings.DeviceControlMode.SHOW_WHEN_EXPANDED)
-            val classificationMode by settings.classificationMode.collectAsState(initial = com.supershade.settings.ClassificationMode.ONE_UI)
-            val showCategoryBar by settings.showCategoryBar.collectAsState(initial = true)
-            val appCategoryOverrides by settings.appCategoryOverrides.collectAsState(initial = emptyMap())
-            val availableUpdate by updateRepo.availableUpdate.collectAsState()
-            val isCheckingUpdate by updateRepo.isChecking.collectAsState()
-            val showWhatsNew by updateRepo.showWhatsNew.collectAsState()
-            val previousVersion by updateRepo.previousVersion.collectAsState()
+            val shizukuConnected by connector.isConnected.collectAsStateWithLifecycle()
+            val theme by settings.theme.collectAsStateWithLifecycle(initialValue = ShadeTheme.OneUI)
+            val darkThemeMode by settings.darkThemeMode.collectAsStateWithLifecycle(initialValue = com.supershade.ui.theme.DarkThemeMode.SYSTEM)
+            val accentColor by settings.accentColor.collectAsStateWithLifecycle(initialValue = com.supershade.settings.AccentColor.GALAXY_BLUE)
+            val monetAccentStrength by settings.monetAccentStrength.collectAsStateWithLifecycle(initialValue = 1.0f)
+            val backdropTheme by settings.backdropTheme.collectAsStateWithLifecycle(initialValue = BackdropTheme.FROSTED_GLASS)
+            val backdropOpacity by settings.backdropOpacity.collectAsStateWithLifecycle(initialValue = 0.78f)
+            val notificationDensity by settings.notificationDensity.collectAsStateWithLifecycle(initialValue = com.supershade.settings.NotificationDensity.BALANCED)
+            val isActive by settings.isActive.collectAsStateWithLifecycle(initialValue = false)
+            val blockSystemShade by settings.blockSystemShade.collectAsStateWithLifecycle(initialValue = true)
+            val tileShape by settings.tileShape.collectAsStateWithLifecycle(initialValue = com.supershade.settings.TileShape.SQUIRCLE)
+            val tileSize by settings.tileSize.collectAsStateWithLifecycle(initialValue = com.supershade.settings.TileSize.STANDARD)
+            val tileColumns by settings.tileColumns.collectAsStateWithLifecycle(initialValue = com.supershade.settings.TileGridColumns.STANDARD)
+            val showWideCards by settings.showWideCards.collectAsStateWithLifecycle(initialValue = true)
+            val splitGestureMode by settings.splitGestureMode.collectAsStateWithLifecycle(initialValue = com.supershade.settings.SplitGestureMode.SEPARATE_70_30)
+            val showPanelSwitcherPill by settings.showPanelSwitcherPill.collectAsStateWithLifecycle(initialValue = false)
+            val cardBorderWidth by settings.cardBorderWidth.collectAsStateWithLifecycle(initialValue = com.supershade.settings.CardBorderWidth.THIN)
+            val hiddenChannels by settings.hiddenChannels.collectAsStateWithLifecycle(initialValue = emptySet())
+            val hideOngoingNotifications by settings.hideOngoingNotifications.collectAsStateWithLifecycle(initialValue = false)
+            val ambientMediaWidgetEnabled by settings.ambientMediaWidgetEnabled.collectAsStateWithLifecycle(initialValue = true)
+            val deviceControlMode by settings.deviceControlMode.collectAsStateWithLifecycle(initialValue = com.supershade.settings.DeviceControlMode.SHOW_WHEN_EXPANDED)
+            val classificationMode by settings.classificationMode.collectAsStateWithLifecycle(initialValue = com.supershade.settings.ClassificationMode.ONE_UI)
+            val showCategoryBar by settings.showCategoryBar.collectAsStateWithLifecycle(initialValue = true)
+            val appCategoryOverrides by settings.appCategoryOverrides.collectAsStateWithLifecycle(initialValue = emptyMap())
+            val availableUpdate by updateRepo.availableUpdate.collectAsStateWithLifecycle()
+            val isCheckingUpdate by updateRepo.isChecking.collectAsStateWithLifecycle()
+            val showWhatsNew by updateRepo.showWhatsNew.collectAsStateWithLifecycle()
+            val previousVersion by updateRepo.previousVersion.collectAsStateWithLifecycle()
 
             SuperShadeAppTheme(mode = darkThemeMode, accentColor = accentColor) {
                 // Re-checked on every resume and reactively via Shizuku listener so user sees instant feedback
-                val shizukuPermGrantedFlow by connector.hasPermissionFlow.collectAsState()
+                val shizukuPermGrantedFlow by connector.hasPermissionFlow.collectAsStateWithLifecycle()
                 var notifAccessGranted by remember { mutableStateOf(isNotificationAccessGranted()) }
                 var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(this)) }
                 var shizukuPermGranted by remember { mutableStateOf(connector.hasPermission()) }
@@ -135,13 +136,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Detect fresh install / version upgrade → show What's New sheet
+                // Detect fresh install / version upgrade → show What's New sheet + throttled 24h update check
                 LaunchedEffect(Unit) {
                     updateRepo.initSession()
-                }
-
-                // Throttled update check — once per 24 h
-                LaunchedEffect(Unit) {
                     val lastCheck = settings.lastUpdateCheckMs.first()
                     val now = System.currentTimeMillis()
                     if (now - lastCheck > 24 * 60 * 60 * 1000L) {

@@ -105,6 +105,7 @@ import com.supershade.domain.notification.model.NotificationAction
 import com.supershade.domain.notification.model.ShadeNotification
 
 import androidx.compose.foundation.Image
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -112,6 +113,37 @@ import androidx.core.graphics.drawable.toBitmap
 import com.supershade.ui.theme.LocalShadeShapeScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+
+val LocalCurrentTimeMillis = compositionLocalOf { System.currentTimeMillis() }
+
+internal object AppMetaCache {
+    private val names = ConcurrentHashMap<String, String>()
+    private val icons = ConcurrentHashMap<String, ImageBitmap>()
+
+    fun fallbackName(pkg: String): String =
+        names[pkg] ?: pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+
+    fun cachedIcon(pkg: String): ImageBitmap? = icons[pkg]
+
+    fun resolve(context: android.content.Context, pkg: String): Pair<String, ImageBitmap?> {
+        val name = names.getOrPut(pkg) {
+            try {
+                val info = context.packageManager.getApplicationInfo(pkg, 0)
+                context.packageManager.getApplicationLabel(info).toString()
+            } catch (_: Exception) {
+                pkg.substringAfterLast('.').replaceFirstChar { it.uppercase() }
+            }
+        }
+        val icon = icons[pkg] ?: try {
+            context.packageManager.getApplicationIcon(pkg)
+                .toBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
+                .asImageBitmap()
+                .also { icons[pkg] = it }
+        } catch (_: Exception) { null }
+        return name to icon
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -135,25 +167,15 @@ fun NotificationCard(
     var replyingAction by remember { mutableStateOf<NotificationAction?>(null) }
     var showSettingsMenu by remember { mutableStateOf(false) }
 
-    // Resolve readable app name from the package
-    val appName = remember(notification.packageName) {
-        try {
-            val info = context.packageManager.getApplicationInfo(notification.packageName, 0)
-            context.packageManager.getApplicationLabel(info).toString()
-        } catch (_: Exception) {
-            notification.packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-        }
-    }
-
-    val appIconBitmap by produceState<ImageBitmap?>(null, notification.packageName) {
+    val appMeta by produceState(
+        initialValue = AppMetaCache.fallbackName(notification.packageName) to AppMetaCache.cachedIcon(notification.packageName),
+        key1 = notification.packageName,
+    ) {
         value = withContext(Dispatchers.IO) {
-            try {
-                context.packageManager.getApplicationIcon(notification.packageName)
-                    .toBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-                    .asImageBitmap()
-            } catch (_: Exception) { null }
+            AppMetaCache.resolve(context, notification.packageName)
         }
     }
+    val (appName, appIconBitmap) = appMeta
 
     val largeIconBitmap by produceState<ImageBitmap?>(null, notification.largeIcon) {
         value = withContext(Dispatchers.IO) {
@@ -165,14 +187,9 @@ fun NotificationCard(
         }
     }
 
-    val postTimeLabel by produceState(
-        initialValue = relativeTime(notification.postTime),
-        key1 = notification.postTime,
-    ) {
-        while (true) {
-            delay(60_000L)
-            value = relativeTime(notification.postTime)
-        }
+    val nowMs = LocalCurrentTimeMillis.current
+    val postTimeLabel = remember(notification.postTime, nowMs) {
+        relativeTime(notification.postTime, nowMs)
     }
 
     val displayTitle = when {
@@ -1463,8 +1480,8 @@ private fun ThemedNotificationProgressBar(
     }
 }
 
-private fun relativeTime(postTime: Long): String {
-    val delta = System.currentTimeMillis() - postTime
+private fun relativeTime(postTime: Long, nowMs: Long = System.currentTimeMillis()): String {
+    val delta = nowMs - postTime
     return when {
         delta < 60_000L    -> "now"
         delta < 3_600_000L -> "${delta / 60_000}m ago"

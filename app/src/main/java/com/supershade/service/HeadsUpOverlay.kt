@@ -195,18 +195,28 @@ class HeadsUpOverlay(
                 setViewTreeViewModelStoreOwner(owner)
                 setViewTreeSavedStateRegistryOwner(owner)
                 setContent {
-                    val activeTheme by produceState<ShadeTheme>(ShadeTheme.OneUI) {
-                        settings?.theme?.collect { value = it }
+                    val themeSpec by produceState(
+                        initialValue = listOf<Any>(
+                            ShadeTheme.OneUI,
+                            DarkThemeMode.SYSTEM,
+                            com.supershade.settings.AccentColor.GALAXY_BLUE,
+                            1.0f,
+                        ),
+                        key1 = settings,
+                    ) {
+                        val s = settings ?: return@produceState
+                        kotlinx.coroutines.flow.combine(
+                            s.theme,
+                            s.darkThemeMode,
+                            s.accentColor,
+                            s.monetAccentStrength,
+                        ) { t, d, a, m -> listOf<Any>(t, d, a, m) }
+                            .collect { value = it }
                     }
-                    val activeDarkMode by produceState(DarkThemeMode.SYSTEM) {
-                        settings?.darkThemeMode?.collect { value = it }
-                    }
-                    val activeAccent by produceState(com.supershade.settings.AccentColor.GALAXY_BLUE) {
-                        settings?.accentColor?.collect { value = it }
-                    }
-                    val activeMonetStrength by produceState(1.0f) {
-                        settings?.monetAccentStrength?.collect { value = it }
-                    }
+                    val activeTheme = themeSpec[0] as ShadeTheme
+                    val activeDarkMode = themeSpec[1] as DarkThemeMode
+                    val activeAccent = themeSpec[2] as com.supershade.settings.AccentColor
+                    val activeMonetStrength = themeSpec[3] as Float
 
                     val isAmoled = activeDarkMode == DarkThemeMode.AMOLED
                     val superHaptics = remember { SuperHaptics(context) }
@@ -336,15 +346,16 @@ class HeadsUpOverlay(
         val scope = rememberCoroutineScope()
         val theme = LocalShadeTheme.current
 
-        val appIcon by produceState<ImageBitmap?>(null, notification.packageName) {
+        val appMeta by produceState(
+            initialValue = com.supershade.ui.shade.AppMetaCache.fallbackName(notification.packageName) to
+                com.supershade.ui.shade.AppMetaCache.cachedIcon(notification.packageName),
+            key1 = notification.packageName,
+        ) {
             value = withContext(Dispatchers.IO) {
-                try {
-                    ctx.packageManager.getApplicationIcon(notification.packageName)
-                        .toBitmap(48, 48, android.graphics.Bitmap.Config.ARGB_8888)
-                        .asImageBitmap()
-                } catch (_: Exception) { null }
+                com.supershade.ui.shade.AppMetaCache.resolve(ctx, notification.packageName)
             }
         }
+        val (appName, appIcon) = appMeta
         val largeIcon by produceState<ImageBitmap?>(null, notification.largeIcon) {
             value = withContext(Dispatchers.IO) {
                 try {
@@ -358,15 +369,6 @@ class HeadsUpOverlay(
         val headerIcon = largeIcon ?: appIcon
         val headerIconSize = if (largeIcon != null) 28.dp else 16.dp
         val headerIconCorner = if (largeIcon != null) 50 else 4
-
-        val appName = remember(notification.packageName) {
-            try {
-                val info = ctx.packageManager.getApplicationInfo(notification.packageName, 0)
-                ctx.packageManager.getApplicationLabel(info).toString()
-            } catch (_: Exception) {
-                notification.packageName.substringAfterLast('.').replaceFirstChar { it.uppercase() }
-            }
-        }
 
         var visible by remember { mutableStateOf(false) }
         var isSettingsMode by remember { mutableStateOf(false) }

@@ -6,8 +6,8 @@ plugins {
 }
 
 // Version can be overridden by CI via: -PversionCode=123 -PversionName=1.2.3
-def appVersionCode = project.findProperty("versionCode")?.toInteger() ?: 62
-def appVersionName = project.findProperty("versionName") ?: "1.9.37"
+def appVersionCode = project.findProperty("versionCode")?.toInteger() ?: 63
+def appVersionName = project.findProperty("versionName") ?: "1.9.38"
 
 android {
     namespace 'com.supershade'
@@ -44,6 +44,7 @@ android {
     buildTypes {
         release {
             minifyEnabled true
+            shrinkResources true
             def ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath && new File(ksPath).exists()) {
                 signingConfig signingConfigs.release

@@ -326,7 +326,7 @@ class SuperShadeAccessibilityService : AccessibilityService() {
         super.onDestroy()
         detachAccessibilityTouchCapture()
         shadeWindowManager.hide()
-        governor.restoreSystemStatusBarBlocking()
+        governor.restoreSystemStatusBarAsync()
         scope.cancel()
         instance = null
         _isRunningFlow.value = false

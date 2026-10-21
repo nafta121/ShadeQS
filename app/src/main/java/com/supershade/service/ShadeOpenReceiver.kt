@@ -104,8 +104,12 @@ class ShadeOpenReceiver : BroadcastReceiver() {
             return
         }
 
-        // Fallback: start ShadeService directly
-        Log.d(TAG, "AccessibilityService not running — starting ShadeService directly")
+        // Fallback: forward to running ShadeService only when SuperShade is active
+        if (!ShadeService.isRunning) {
+            Log.d(TAG, "Ignoring broadcast: neither AccessibilityService nor ShadeService is active")
+            return
+        }
+        Log.d(TAG, "AccessibilityService not running — forwarding to active ShadeService")
         val serviceIntent = Intent(context, ShadeService::class.java).apply {
             this.action = ShadeService.ACTION_OPEN_SHADE
             putExtra(ShadeService.EXTRA_EXPAND_QS, expandQs)
