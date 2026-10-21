@@ -88,11 +88,15 @@ class DomainLogicTest {
             title = "VPN Connected",
             text = "Active",
             subText = null,
-            postTime = 1000L,
-            isOngoing = true,
-            isClearable = false,
             category = ShadeCategory.Silent,
+            smallIcon = null,
+            isGroupSummary = false,
+            groupKey = null,
+            postTime = 1000L,
+            actions = emptyList(),
+            isClearable = false,
             channelId = "vpn_status",
+            isOngoing = true,
         )
         val normalSilent = ongoingSilent.copy(
             key = "k2",
