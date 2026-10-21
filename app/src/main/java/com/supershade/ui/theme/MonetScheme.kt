@@ -68,7 +68,7 @@ fun monetScheme(
 fun ColorScheme.withCustomAccent(accentColor: AccentColor, isDark: Boolean): ColorScheme {
     if (accentColor == AccentColor.MONET || accentColor.hex == 0L) return this
     val c = Color(accentColor.hex)
-    val onPrimaryColor = if (c.luminance() > 0.45f) Color.Black else Color.White
+    val onPrimaryColor = if (c.luminance() > 0.35f) Color.Black else Color.White
     val containerAlpha = if (isDark) 0.35f else 0.20f
     val containerBg = lerp(surface, c, containerAlpha)
     val onContainerColor = if (containerBg.luminance() > 0.45f) Color(0xFF10141A) else Color.White
