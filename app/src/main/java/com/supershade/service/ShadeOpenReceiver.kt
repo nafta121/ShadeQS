@@ -63,10 +63,6 @@ class ShadeOpenReceiver : BroadcastReceiver() {
         private const val ONE_HAND_QUICK_PANEL = "com.samsung.android.onehandedmode.OPEN_QUICK_PANEL"
         private const val EDGE_PANEL_QUICK_PANEL = "com.samsung.android.cocktailbar.OPEN_QUICK_PANEL"
 
-        /** CLOSE_SYSTEM_DIALOGS reason that some Samsung paths use to signal panel open failure */
-        private const val CLOSE_DIALOGS = "android.intent.action.CLOSE_SYSTEM_DIALOGS"
-        private const val REASON_NOTIF_BAR = "notificationbar"
-
         private const val TAG = "ShadeOpenReceiver"
     }
 

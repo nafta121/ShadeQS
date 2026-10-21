@@ -1,56 +1,41 @@
-# SuperShade — Claude Code Guidelines
+# ShadeQS (SuperShade) — Developer & AI Guidelines
 
-Custom notification shade replacement for Android. Kotlin + Jetpack Compose + Koin + Shizuku.
-Path: `~/projects/SuperShade/`
+Custom notification shade replacement for Android (`com.supershade`, v1.9.36, SDK 29–36, JDK 21).
+Stack: Kotlin 2.1 + Jetpack Compose (BOM 2026.02.00) + Koin + Shizuku + DataStore.
+Path: `/data/data/com.termux/files/home/ShadeQS/`
 
-## Build commands
-
-Local Android SDK is set up (`local.properties` → `sdk.dir`). Builds run on-device.
+## Build & Test Commands
 
 | Task | Command |
 |------|---------|
-| Compile check (fast) | `bash scripts/dev/check-build.sh` |
-| Build + install debug APK | `bash scripts/dev/build-install-debug.sh` |
-| Full debug build only | `./gradlew :app:assembleDebug` |
-| CI status | `gh run list --limit 5` |
+| Compile check (fast, no APK) | `bash scripts/dev/check-build.sh` |
+| Build + install debug APK via ADB | `bash scripts/dev/build-install-debug.sh` |
+| Full debug APK | `./gradlew :app:assembleDebug` |
+| Open shade via ADB (test UI) | `adb shell am broadcast -a com.supershade.action.OPEN_SHADE -n com.supershade.debug/com.supershade.service.ShadeOpenReceiver` |
+| Verify active service | `adb shell dumpsys activity services \| grep ShadeService` |
 
-CI (GitHub Actions) runs on push to `main`/`develop` and on `v*` tags.
-- `build.yml` — debug APK
-- `release.yml` — signed release APK + GitHub Release on `v*` tag
+CI (`.github/workflows/`): `build.yml` runs on push to `main`/`develop`; `release.yml` builds & publishes APK on `v*` tag push.
 
-## Architecture
+## Architecture & Package Map (`app/src/main/java/com/supershade/`)
 
-| Layer | Key classes |
-|-------|------------|
-| Entry | `MainActivity.kt`, `SuperShadeApplication.kt` (Koin init) |
-| Overlay | `ShadeService` (foreground service), `ShadeWindowManager` |
-| State | `ShadeViewModel` — Koin `single {}` (shared between Service and overlay) |
-| Notifications | `NotificationCollector` (NLS) → `NotificationRepository` |
-| Shizuku | `StatusBarGovernor` wraps `Shizuku.newProcess()` for `cmd statusbar` commands |
-| Settings | `ui/settings/` — DataStore-backed settings |
-| Updates | `domain/update/UpdateChecker` — GitHub Releases API, once/24h |
+| Layer | Key Files & Responsibility |
+|-------|----------------------------|
+| **Entry & DI** | `MainActivity.kt`, `SuperShadeApplication.kt`, `di/AppModule.kt` (Koin singletons) |
+| **Overlay & Services** | `overlay/ShadeWindowManager.kt` (`TYPE_APPLICATION_OVERLAY` + `ShadeLifecycleOwner` + status bar touch blocker), `overlay/GestureOverlay.kt`, `service/ShadeService.kt` (FGS), `service/SuperShadeAccessibilityService.kt` (`TYPE_ACCESSIBILITY_OVERLAY` at layer ~33, horizontal brightness scrub, Good Lock OHO+ key/event intercept), `service/HeadsUpOverlay.kt` (2D peek banners + `AmbientMediaCard` with `FLAG_SHOW_WHEN_LOCKED`), `service/NotificationCollector.kt` (NLS), `service/ShadeOpenReceiver.kt`, `service/SuperShadeTileService.kt` |
+| **State & Settings** | `viewmodel/ShadeViewModel.kt`, `viewmodel/ShadeState.kt`, `settings/ShadeSettings.kt` (DataStore `supershade_prefs`) |
+| **Shizuku IPC** | `shizuku/StatusBarGovernor.kt` (`cmd statusbar`, `svc` toggles), `shizuku/ShadeCommanderService.java` (pure Java `@Keep` UserService), `shizuku/ShizukuPlusConnector.kt` |
+| **Notifications** | `domain/notification/NotificationRepository.kt` (active list, pins, snooze, undo, 60-item ring buffer history), `CategoryEngine.kt` (5 independent `ClassificationMode`s: `ONE_UI`, `AOSP`, `ESSENTIAL`, `CYBERPUNK`, `UNIFIED` + per-app overrides), `AdaptivePriorityLoop.kt` (autonomous interaction scoring/decay), `OtpDetector.kt` (OTP copy chip + VIP badge) |
+| **Quick Settings** | `domain/tile/TileDefinition.kt` (46+ `CANONICAL_TILES`, vendor alias normalizer, label humanizer), `TileRepository.kt` (0ms reactive observers), `TileToggler.kt` (Shizuku + standard API fallback) |
+| **Media, Audio, System** | `domain/media/MediaRepository.kt`, `domain/audio/AudioRepository.kt` (5-stream mixer: Media, Ring, Notif, System, Alarm), `domain/brightness/BrightnessRepository.kt`, `domain/system/SystemStatusRepository.kt`, `haptics/SuperHaptics.kt` (Samsung LRA `semCreateWaveform` 50025–50151 + Android R+ primitives) |
+| **UI & Themes** | `ui/shade/ShadeRoot.kt` (120Hz lock, velocity fling, Separate/Together pager), `ui/shade/*` (cards, sliders, detail/history sheets), `ui/theme/*` (`OneUI`, `Pixel`, `Nothing`, `Cyberpunk`, `PureMaterial`, `MonetScheme.kt` strength lerp, `BackdropTheme.kt`) |
 
-## Critical architecture rules
+## Critical Architecture Rules (Never Violate)
 
-| Rule | Why |
-|------|-----|
-| `ShadeViewModel` is `single {}` not `viewModel {}` | Shared between `ShadeService` and overlay — using `viewModel {}` would create a separate instance for each. Never change this. |
-| `ShadeWindowManager` creates a fresh `ShadeLifecycleOwner` on each `show()` | Lifecycle can't re-RESUME after DESTROY. Each overlay instance needs its own lifecycle. |
-| Shizuku binder required at runtime | `StatusBarGovernor` needs `Shizuku.newProcess()`. Always guard with `Shizuku.pingBinder()` before any Shizuku call. |
+1. **`ShadeViewModel` must stay `single {}` in `AppModule.kt` (never `viewModel {}`)**: It is shared between `ShadeService`, `SuperShadeAccessibilityService`, `ShadeWindowManager`, and `MainActivity`. Separate instances break shade open/close and state sync.
+2. **Fresh `ShadeLifecycleOwner` on every `ShadeWindowManager.show()`**: Android `LifecycleRegistry` cannot transition from `DESTROYED` back to `RESUMED`. Never reuse a destroyed owner across `show()`/`hide()` cycles.
+3. **`ShadeCommanderService.java` must remain pure Java with `@Keep` constructors**: `ShizukuServiceStarter` instantiates it via reflection in a separate process; converting to Kotlin causes `InstantiationException` on secondary dex linkage. Always guard Shizuku calls with `connector.hasPermission()`.
+4. **Preserve 120Hz & main-thread responsiveness**: Keep `StatusBarGovernor` shell calls and `BrightnessRepository.set()` off the main thread (`Dispatchers.IO`). Update `app/src/main/baseline-prof.txt` if renaming core overlay/UI classes.
 
-## On-device testing
-
-ADB loopback works without Wi-Fi: `adb connect 127.0.0.1:5555`
-
-Fastest path: `bash scripts/dev/build-install-debug.sh`
-This builds a debug APK and installs it directly over ADB. The app requires Shizuku running on the test device for overlay + status bar control.
-
-After install, verify with: `adb -s 127.0.0.1:5555 shell dumpsys activity services | grep ShadeService`
-
-## Git / commits
-
-- Stage files by name, never `git add -A`
-- Push `v*` tags to trigger release CI: `git tag v1.9.3 && git push origin v1.9.3`
-
-## Sentry / crash reporting
-Check `app/src/main/java/com/supershade/` for any Sentry integration before adding crash logging.
+## Git & Releases
+- Stage files explicitly by name (`git add <file>`), never `git add -A`.
+- Tag `v*` (e.g. `git tag v1.9.37 && git push origin v1.9.37`) to trigger `release.yml`.

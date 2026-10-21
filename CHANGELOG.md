@@ -5,6 +5,27 @@ Releases follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.37] — 2026-10-21
+
+### Fixed & Audited (Stability, Security, Performance, Theme & Settings Polish)
+- **Notification & Overlay Reliability**:
+  - Preserved pinned notifications in Android's system tray when invoking `Clear All` (`NotificationRepository`).
+  - Replaced `mutableMapOf` with `ConcurrentHashMap` for `activeSbns` and `snoozedUntil` to eliminate cross-thread race conditions.
+  - Deduplicated top-edge gesture capture between `SuperShadeAccessibilityService` and `ShadeService`, detaching the fallback overlay when Accessibility Service is active.
+- **Shizuku, Security & System Controls**:
+  - Prevented Shizuku process deadlocks in `ShadeCommanderService` by merging error streams, draining output buffers, and enforcing a 5-second process timeout.
+  - Hardened internal system broadcast receivers with `Context.RECEIVER_NOT_EXPORTED`.
+  - Coalesced status-bar brightness scrubbing IPC writes via mutex and skipped redundant `setAutoOff()` shell calls.
+  - Wired DND auto-off countdown timer in `ShadeViewModel.setDndDuration` and fixed Night Light canonical tile toggling in `TileToggler`.
+  - Updated `UpdateChecker` endpoint to `nafta121/ShadeQS`.
+- **Theme Engine & Settings Screen Refactor**:
+  - Persisted `Clover` and `Burst` tile shapes across restarts and respected user-selected tile shapes across all themes (`Cyberpunk`, `Pixel`, `Nothing`, `One UI`).
+  - Fixed custom accent contrast (`onPrimary` / `onPrimaryContainer`), AMOLED pure-black propagation, and theme-aware Settings card surfaces in Light/Dark/AMOLED modes.
+  - Consolidated duplicated Settings sheets/Pickers (`AppPickerSheet`, `SplitGestureSelectorCard`, `ThemePreviewCard`) removing ~500 lines of redundant code.
+  - Added unit test suite (`DomainLogicTest`) covering `OtpDetector`, tile normalization, semantic version checks, and theme/shape resolution.
+
+---
+
 ## [1.9.36] — 2026-10-06
 
 ### Added & Enhanced (One UI 9, Pixel Expressive, Nothing OS 3.0 & Cyberpunk HUD Theme Polish)

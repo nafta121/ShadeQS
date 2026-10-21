@@ -94,6 +94,9 @@ object M3ExpressiveShapes {
     val MorphCircleToSunny: Morph by lazy {
         Morph(Circle, Sunny)
     }
+
+    val Clover4Shape: Shape by lazy { PolygonShape(Clover4) }
+    val SoftBurst8Shape: Shape by lazy { PolygonShape(SoftBurst8) }
 }
 
 /**
@@ -142,7 +145,7 @@ fun RoundedPolygon.toComposePath(targetPath: Path = Path()): Path {
  * High-performance Compose [Shape] that transforms a [Morph] into an [Outline.Generic]
  * scaled and centered to fit within the component's render bounds.
  */
-class MorphShape(
+data class MorphShape(
     private val morph: Morph,
     private val progress: Float,
     private val rotationAngle: Float = 0f,
@@ -154,27 +157,7 @@ class MorphShape(
     ): Outline {
         val path = Path()
         morph.toComposePath(progress, path)
-
-        val bounds = path.getBounds()
-        val matrix = Matrix()
-
-        val scaleX = if (bounds.width > 0f) size.width / bounds.width else 1f
-        val scaleY = if (bounds.height > 0f) size.height / bounds.height else 1f
-
-        // Compose Matrix ops post-multiply, so the LAST call is applied to points FIRST.
-        // Desired point pipeline: move bounds to origin -> scale to fit -> rotate about center.
-        if (rotationAngle != 0f) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            matrix.translate(cx, cy)
-            matrix.rotateZ(rotationAngle)
-            matrix.translate(-cx, -cy)
-        }
-        matrix.scale(scaleX, scaleY)
-        matrix.translate(-bounds.left, -bounds.top)
-
-        path.transform(matrix)
-        return Outline.Generic(path)
+        return transformPathToOutline(path, size, rotationAngle)
     }
 }
 
@@ -195,40 +178,56 @@ fun rememberMorphShape(
 /**
  * High-performance static Compose [Shape] that draws a [RoundedPolygon] as an [Outline.Generic].
  */
-class PolygonShape(
+data class PolygonShape(
     private val polygon: RoundedPolygon,
     private val rotationAngle: Float = 0f,
 ) : Shape {
+    private var cachedSize: Size = Size.Unspecified
+    private var cachedOutline: Outline? = null
+
     override fun createOutline(
         size: Size,
         layoutDirection: LayoutDirection,
         density: Density,
     ): Outline {
+        if (size == cachedSize) {
+            cachedOutline?.let { return it }
+        }
         val path = Path()
         polygon.toComposePath(path)
-
-        val bounds = path.getBounds()
-        val matrix = Matrix()
-
-        val scaleX = if (bounds.width > 0f) size.width / bounds.width else 1f
-        val scaleY = if (bounds.height > 0f) size.height / bounds.height else 1f
-
-        // Compose Matrix ops post-multiply, so the LAST call is applied to points FIRST.
-        // Desired point pipeline: move bounds to origin -> scale to fit -> rotate about center.
-        if (rotationAngle != 0f) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            matrix.translate(cx, cy)
-            matrix.rotateZ(rotationAngle)
-            matrix.translate(-cx, -cy)
+        return transformPathToOutline(path, size, rotationAngle).also {
+            cachedSize = size
+            cachedOutline = it
         }
-        matrix.scale(scaleX, scaleY)
-        matrix.translate(-bounds.left, -bounds.top)
-
-        path.transform(matrix)
-        return Outline.Generic(path)
     }
 }
 
-fun RoundedPolygon.toComposeShape(rotationAngle: Float = 0f): Shape = PolygonShape(this, rotationAngle)
+private fun transformPathToOutline(path: Path, size: Size, rotationAngle: Float): Outline {
+    val bounds = path.getBounds()
+    val matrix = Matrix()
+
+    val scaleX = if (bounds.width > 0f) size.width / bounds.width else 1f
+    val scaleY = if (bounds.height > 0f) size.height / bounds.height else 1f
+
+    // Compose Matrix ops post-multiply, so the LAST call is applied to points FIRST.
+    // Desired point pipeline: move bounds to origin -> scale to fit -> rotate about center.
+    if (rotationAngle != 0f) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        matrix.translate(cx, cy)
+        matrix.rotateZ(rotationAngle)
+        matrix.translate(-cx, -cy)
+    }
+    matrix.scale(scaleX, scaleY)
+    matrix.translate(-bounds.left, -bounds.top)
+
+    path.transform(matrix)
+    return Outline.Generic(path)
+}
+
+fun RoundedPolygon.toComposeShape(rotationAngle: Float = 0f): Shape = when {
+    rotationAngle == 0f && this === M3ExpressiveShapes.Clover4 -> M3ExpressiveShapes.Clover4Shape
+    rotationAngle == 0f && this === M3ExpressiveShapes.SoftBurst8 -> M3ExpressiveShapes.SoftBurst8Shape
+    else -> PolygonShape(this, rotationAngle)
+}
 

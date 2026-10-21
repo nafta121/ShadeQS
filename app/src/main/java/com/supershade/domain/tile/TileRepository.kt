@@ -94,7 +94,7 @@ class TileRepository(
                 }
             }
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
+                context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
                 context.registerReceiver(receiver, filter)
             }
@@ -248,13 +248,6 @@ class TileRepository(
             d.draw(canvas)
             bitmap.asImageBitmap()
         } catch (_: Exception) { null }
-    }
-
-    fun setTileActive(id: String, active: Boolean) {
-        val target = canonicalTileId(id)
-        _tiles.value = _tiles.value.map {
-            if (canonicalTileId(it.id) == target) it.copy(isActive = active) else it
-        }
     }
 
     private fun queryTileSubtitle(id: String): String? {

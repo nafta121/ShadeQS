@@ -238,15 +238,6 @@ class TileToggler(
                     }
                 }
 
-                // Battery Saver: Shizuku privileged or battery settings
-                id.contains("battery") || id.contains("batterymode") -> {
-                    if (governor.canRunPrivileged) {
-                        governor.setBatterySaver(newState)
-                    } else {
-                        openSettings(tile)
-                    }
-                }
-
                 // Extra Dim / Reduce Bright Colors
                 id.contains("reducebright") || id.contains("extradim") -> {
                     if (governor.canRunPrivileged) {
@@ -256,8 +247,8 @@ class TileToggler(
                     }
                 }
 
-                // Eye Comfort Shield / Blue Light Filter
-                id.contains("bluelight") || id.contains("eyecomfort") -> {
+                // Eye Comfort Shield / Blue Light Filter / Night Light
+                id.contains("bluelight") || id.contains("eyecomfort") || id == "night" || id.contains("nightlight") -> {
                     if (governor.canRunPrivileged) {
                         governor.putSetting("system", "blue_light_filter", if (newState) "1" else "0")
                         governor.putSetting("secure", "night_display_activated", if (newState) "1" else "0")
@@ -396,45 +387,8 @@ class TileToggler(
     }
 
     private suspend fun togglePrivileged(tile: TileDefinition) {
-        val id = tile.id.lowercase()
-        val newState = !tile.isActive
-
-        when {
-            id.contains("wifi") || id.contains("internet") -> {
-                governor.runShell("svc", "wifi", if (newState) "enable" else "disable")
-            }
-            id.contains("bt") || id.contains("bluetooth") -> {
-                governor.runShell("svc", "bluetooth", if (newState) "enable" else "disable")
-            }
-            id.contains("dark") || id.contains("uimodenight") || id.contains("night") -> {
-                governor.runShell("cmd", "uimode", "night", if (newState) "yes" else "no")
-            }
-            id.contains("rotation") || id.contains("rotationlock") -> {
-                governor.runShell("settings", "put", "system", "accelerometer_rotation", if (newState) "1" else "0")
-            }
-            id.contains("airplane") -> {
-                governor.runShell("cmd", "connectivity", "airplane-mode", if (newState) "enable" else "disable")
-            }
-            id.contains("location") -> {
-                governor.runShell("cmd", "location", "set-location-enabled", if (newState) "true" else "false")
-            }
-            id.contains("nfc") -> {
-                governor.runShell("svc", "nfc", if (newState) "enable" else "disable")
-            }
-            id.contains("cell") || id.contains("cellular") || id.contains("data") -> {
-                governor.runShell("svc", "data", if (newState) "enable" else "disable")
-            }
-            id.contains("dnd") || id.contains("donotdisturb") -> {
-                governor.runShell("cmd", "notification", "set_dnd", if (newState) "on" else "off")
-            }
-            id.contains("battery") || id.contains("batterymode") -> {
-                governor.runShell("cmd", "power", "set-mode", if (newState) "1" else "0")
-            }
-            else -> {
-                val component = tile.componentName ?: tile.id
-                governor.clickTile(component)
-            }
-        }
+        val component = tile.componentName ?: tile.id
+        governor.clickTile(component)
     }
 
     private fun openSettings(tile: TileDefinition) {

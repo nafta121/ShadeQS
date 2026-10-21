@@ -57,6 +57,8 @@ class ShadeViewModel(
 
     private var positionTickerJob: Job? = null
     private var brightnessJob: Job? = null
+    private val brightnessMutex = kotlinx.coroutines.sync.Mutex()
+    private var dndTimerJob: Job? = null
 
     init {
         brightnessRepo.brightness
@@ -610,6 +612,16 @@ class ShadeViewModel(
                 activeTileDetail = detail.copy(dndDurationMinutes = minutes)
             )
         }
+        dndTimerJob?.cancel()
+        if (minutes > 0) {
+            dndTimerJob = viewModelScope.launch {
+                delay(minutes * 60_000L)
+                val dndTile = _state.value.tiles.firstOrNull { it.id.lowercase().contains("dnd") }
+                if (dndTile?.isActive == true) {
+                    tileToggler.toggle(dndTile)
+                }
+            }
+        }
     }
 
     fun toggleHotspotInDetail() {
@@ -792,7 +804,12 @@ class ShadeViewModel(
         _state.update { it.copy(brightness = value) }
         brightnessJob?.cancel()
         brightnessJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            brightnessRepo.set(value)
+            brightnessMutex.lock()
+            try {
+                brightnessRepo.set(_state.value.brightness)
+            } finally {
+                brightnessMutex.unlock()
+            }
         }
     }
 

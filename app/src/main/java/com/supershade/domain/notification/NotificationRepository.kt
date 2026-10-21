@@ -115,7 +115,7 @@ class NotificationRepository(
     var clearAller: (() -> Unit)? = null
 
     // key → timestamp when snooze expires; in-memory only, reset on service restart
-    private val snoozedUntil = mutableMapOf<String, Long>()
+    private val snoozedUntil = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private fun sortNotifications(list: List<ShadeNotification>): List<ShadeNotification> {
         val pinned = _pinnedKeys.value
@@ -320,7 +320,7 @@ class NotificationRepository(
         dismissible.forEach { note ->
             adaptiveLoop?.recordInteraction(note.packageName, note.channelId, NotificationInteractionType.CLEAR_ALL)
         }
-        if (clearAller != null) {
+        if (pinned.isEmpty() && clearAller != null) {
             clearAller?.invoke()
         } else {
             dismissible.forEach { note -> canceller?.invoke(note.key) }
@@ -342,11 +342,6 @@ class NotificationRepository(
             note.channelId,
             NotificationInteractionType.REPLY,
         )
-    }
-
-    fun clearAll() {
-        val pinned = _pinnedKeys.value
-        _notifications.update { current -> current.filter { it.key in pinned } }
     }
 
     fun clearDismissedHistory() {

@@ -6,8 +6,8 @@ plugins {
 }
 
 // Version can be overridden by CI via: -PversionCode=123 -PversionName=1.2.3
-def appVersionCode = project.findProperty("versionCode")?.toInteger() ?: 61
-def appVersionName = project.findProperty("versionName") ?: "1.9.36"
+def appVersionCode = project.findProperty("versionCode")?.toInteger() ?: 62
+def appVersionName = project.findProperty("versionName") ?: "1.9.37"
 
 android {
     namespace 'com.supershade'
@@ -47,6 +47,8 @@ android {
             def ksPath = System.getenv("KEYSTORE_PATH")
             if (ksPath && new File(ksPath).exists()) {
                 signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
             }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -122,9 +124,6 @@ dependencies {
 
     // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
-
-    // Navigation Compose
-    implementation 'androidx.navigation:navigation-compose:2.8.5'
 
     // Serialization (used by UpdateChecker for GitHub JSON)
     implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3'

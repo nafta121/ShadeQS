@@ -147,30 +147,16 @@ fun PixelShadeTheme(
     monetBlendStrength: Float = 1.0f,
     content: @Composable () -> Unit,
 ) {
-    val isSystemInDark = isSystemInDarkTheme()
-    val isDark = when (darkThemeMode) {
-        DarkThemeMode.SYSTEM -> isSystemInDark
-        DarkThemeMode.DARK, DarkThemeMode.AMOLED -> true
-        DarkThemeMode.LIGHT -> false
-    }
-
-    val base = when {
-        isAmoled -> PixelAmoledColors
-        isDark -> PixelColors
-        else -> PixelLightColors
-    }
-
-    val colorScheme = if (accentColor != com.supershade.settings.AccentColor.MONET) {
-        val c = Color(accentColor.hex)
-        base.copy(
-            primary = c,
-            primaryContainer = c.copy(alpha = if (isDark) 0.35f else 0.20f),
-            onPrimary = Color.White,
-            onPrimaryContainer = if (isDark) Color.White else c,
-        )
-    } else {
-        monetScheme(base, isDark, if (isAmoled) 0f else 0.85f, monetBlendStrength)
-    }
+    val colorScheme = resolveShadeColorScheme(
+        darkThemeMode = darkThemeMode,
+        isAmoled = isAmoled,
+        accentColor = accentColor,
+        surfaceBlend = 0.85f,
+        monetBlendStrength = monetBlendStrength,
+        darkColors = PixelColors,
+        lightColors = PixelLightColors,
+        amoledColors = PixelAmoledColors,
+    )
     MaterialTheme(
         colorScheme = colorScheme,
         typography = PixelTypography,

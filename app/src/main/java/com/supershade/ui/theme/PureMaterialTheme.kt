@@ -93,34 +93,16 @@ fun PureMaterialShadeTheme(
     monetBlendStrength: Float = 1.0f,
     content: @Composable () -> Unit,
 ) {
-    val context = LocalContext.current
-    val systemInDark = isSystemInDarkTheme()
-
-    val isDark = when (darkThemeMode) {
-        DarkThemeMode.SYSTEM -> systemInDark
-        DarkThemeMode.DARK, DarkThemeMode.AMOLED -> true
-        DarkThemeMode.LIGHT -> false
-    }
-
-    val baseScheme = when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        isDark -> FallbackDarkColors
-        else -> FallbackLightColors
-    }
-
-    val rawScheme = if (isAmoled && isDark) baseScheme.toAmoled() else baseScheme
-    val colorScheme = if (accentColor != com.supershade.settings.AccentColor.MONET) {
-        val c = Color(accentColor.hex)
-        rawScheme.copy(
-            primary = c,
-            primaryContainer = c.copy(alpha = 0.35f),
-        )
-    } else {
-        rawScheme
-    }
-
+    val colorScheme = resolveShadeColorScheme(
+        darkThemeMode = darkThemeMode,
+        isAmoled = isAmoled,
+        accentColor = accentColor,
+        surfaceBlend = 1.0f,
+        monetBlendStrength = monetBlendStrength,
+        darkColors = FallbackDarkColors,
+        lightColors = FallbackLightColors,
+        amoledColors = FallbackDarkColors.toAmoled(),
+    )
     MaterialTheme(
         colorScheme = colorScheme,
         shapes = PureMaterialShapes,

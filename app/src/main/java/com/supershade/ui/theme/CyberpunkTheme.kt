@@ -148,31 +148,16 @@ fun CyberpunkShadeTheme(
     monetBlendStrength: Float = 1.0f,
     content: @Composable () -> Unit,
 ) {
-    val isSystemInDark = isSystemInDarkTheme()
-    val isDark = when (darkThemeMode) {
-        DarkThemeMode.SYSTEM -> isSystemInDark
-        DarkThemeMode.DARK, DarkThemeMode.AMOLED -> true
-        DarkThemeMode.LIGHT -> false
-    }
-
-    val base = when {
-        isAmoled -> CyberpunkAmoledColors
-        isDark -> CyberpunkDarkColors
-        else -> CyberpunkLightColors
-    }
-
-    val colorScheme = if (accentColor != com.supershade.settings.AccentColor.MONET) {
-        val c = Color(accentColor.hex)
-        base.copy(
-            primary = c,
-            primaryContainer = c.copy(alpha = if (isDark) 0.35f else 0.22f),
-            onPrimary = Color.Black,
-            onPrimaryContainer = if (isDark) Color.White else c,
-        )
-    } else {
-        monetScheme(base, isDark, if (isAmoled) 0f else 0.25f, monetBlendStrength)
-    }
-
+    val colorScheme = resolveShadeColorScheme(
+        darkThemeMode = darkThemeMode,
+        isAmoled = isAmoled,
+        accentColor = accentColor,
+        surfaceBlend = 0.25f,
+        monetBlendStrength = monetBlendStrength,
+        darkColors = CyberpunkDarkColors,
+        lightColors = CyberpunkLightColors,
+        amoledColors = CyberpunkAmoledColors,
+    )
     MaterialTheme(
         colorScheme = colorScheme,
         typography  = CyberpunkTypography,

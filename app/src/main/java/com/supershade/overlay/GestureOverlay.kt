@@ -22,6 +22,7 @@ import com.supershade.settings.SplitGestureMode
  */
 class GestureOverlay(
     private val context: Context,
+    private val windowType: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
     private val isShadeOpen: () -> Boolean = { false },
     private val splitGestureMode: () -> SplitGestureMode = { SplitGestureMode.SEPARATE_70_30 },
     private val onSwipeDown: (expandQs: Boolean) -> Unit,
@@ -50,7 +51,7 @@ class GestureOverlay(
     private val params = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
         captureHeight,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        windowType,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,

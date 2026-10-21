@@ -188,17 +188,29 @@ data class ShadeShapeScheme(
             tilePaddingVertical = 8.dp,
         )
 
+        fun defaultTileShapeForTheme(theme: ShadeTheme): TileShape = when (theme) {
+            ShadeTheme.Pixel -> TileShape.PILL
+            ShadeTheme.Cyberpunk -> TileShape.SHARP
+            ShadeTheme.PureMaterial -> TileShape.ROUNDED
+            ShadeTheme.Nothing, ShadeTheme.OneUI -> TileShape.SQUIRCLE
+        }
+
         fun forTheme(theme: ShadeTheme, tileShape: TileShape): ShadeShapeScheme {
-            if (tileShape != TileShape.SQUIRCLE) {
-                return fromTileShape(tileShape)
-            }
-            return when (theme) {
+            val userScheme = fromTileShape(tileShape)
+            val themeBase = when (theme) {
                 ShadeTheme.Pixel -> PixelExpressive
                 ShadeTheme.Nothing -> NothingMinimal
                 ShadeTheme.Cyberpunk -> CyberpunkTech
                 ShadeTheme.PureMaterial -> PureMaterialM3
                 ShadeTheme.OneUI -> OneUiStandard
             }
+            return themeBase.copy(
+                tile = userScheme.tile,
+                slider = userScheme.slider,
+                tilePaddingHorizontal = userScheme.tilePaddingHorizontal,
+                tilePaddingVertical = userScheme.tilePaddingVertical,
+                tileIconSizeModifier = userScheme.tileIconSizeModifier,
+            )
         }
     }
 }

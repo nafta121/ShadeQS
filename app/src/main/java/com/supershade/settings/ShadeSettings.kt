@@ -339,15 +339,7 @@ class ShadeSettings(private val context: Context) {
     }
 
     val tileShape: Flow<TileShape> = context.dataStore.data.map { prefs ->
-        when (prefs[TILE_SHAPE_KEY]) {
-            "rounded" -> TileShape.ROUNDED
-            "circle" -> TileShape.CIRCLE
-            "pill" -> TileShape.PILL
-            "soft" -> TileShape.SOFT
-            "leaf" -> TileShape.LEAF
-            "sharp" -> TileShape.SHARP
-            else -> TileShape.SQUIRCLE
-        }
+        TileShape.entries.find { it.id == prefs[TILE_SHAPE_KEY] } ?: TileShape.SQUIRCLE
     }
 
     val tileSize: Flow<TileSize> = context.dataStore.data.map { prefs ->
@@ -421,6 +413,7 @@ class ShadeSettings(private val context: Context) {
                 is ShadeTheme.Cyberpunk -> "cyberpunk"
                 else -> "oneui"
             }
+            prefs[TILE_SHAPE_KEY] = com.supershade.ui.theme.ShadeShapeScheme.defaultTileShapeForTheme(theme).id
         }
     }
 

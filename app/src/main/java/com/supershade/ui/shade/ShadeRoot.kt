@@ -149,52 +149,14 @@ fun ShadeRoot(
     }
 
     val isAmoled = state.darkThemeMode == com.supershade.ui.theme.DarkThemeMode.AMOLED
-    val themeWrapper: @Composable (@Composable () -> Unit) -> Unit = when (state.theme) {
-        ShadeTheme.Pixel -> { content ->
-            PixelShadeTheme(
-                isAmoled = isAmoled,
-                darkThemeMode = state.darkThemeMode,
-                accentColor = state.accentColor,
-                monetBlendStrength = state.monetAccentStrength,
-                content = content,
-            )
-        }
-        ShadeTheme.PureMaterial -> { content ->
-            PureMaterialShadeTheme(
-                isAmoled = isAmoled,
-                darkThemeMode = state.darkThemeMode,
-                accentColor = state.accentColor,
-                monetBlendStrength = state.monetAccentStrength,
-                content = content,
-            )
-        }
-        ShadeTheme.Nothing -> { content ->
-            NothingShadeTheme(
-                isAmoled = isAmoled,
-                darkThemeMode = state.darkThemeMode,
-                accentColor = state.accentColor,
-                monetBlendStrength = state.monetAccentStrength,
-                content = content,
-            )
-        }
-        ShadeTheme.Cyberpunk -> { content ->
-            CyberpunkShadeTheme(
-                isAmoled = isAmoled,
-                darkThemeMode = state.darkThemeMode,
-                accentColor = state.accentColor,
-                monetBlendStrength = state.monetAccentStrength,
-                content = content,
-            )
-        }
-        else -> { content ->
-            OneUiShadeTheme(
-                isAmoled = isAmoled,
-                darkThemeMode = state.darkThemeMode,
-                accentColor = state.accentColor,
-                monetBlendStrength = state.monetAccentStrength,
-                content = content,
-            )
-        }
+    val themeWrapper: @Composable (@Composable () -> Unit) -> Unit = { content ->
+        com.supershade.ui.theme.SuperShadeTheme(
+            theme = state.theme,
+            darkThemeMode = state.darkThemeMode,
+            accentColor = state.accentColor,
+            monetBlendStrength = state.monetAccentStrength,
+            content = content,
+        )
     }
 
     val coroutineScope = rememberCoroutineScope()

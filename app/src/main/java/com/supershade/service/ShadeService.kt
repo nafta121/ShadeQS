@@ -42,7 +42,6 @@ class ShadeService : Service() {
     private val connector: ShizukuPlusConnector by inject()
     private val settings: ShadeSettings by inject()
     private val notificationRepo: com.supershade.domain.notification.NotificationRepository by inject()
-    private val brightnessRepo: com.supershade.domain.brightness.BrightnessRepository by inject()
 
     // ShadeViewModel is a Koin singleton — resolved here so the service and the
     // ComposeView overlay share the exact same instance.
@@ -76,20 +75,20 @@ class ShadeService : Service() {
             .onEach { currentSplitMode = it }
             .launchIn(scope)
 
-        // Attach the gesture capture overlay. When a downward swipe is detected
-        // the overlay tells the ShadeWindowManager to show the full shade UI.
+        // Attach fallback gesture capture overlay only when AccessibilityService is not active,
+        // avoiding two duplicate invisible touch strips fighting over top-edge swipes.
         gestureOverlay = GestureOverlay(
             context = this,
             isShadeOpen = { shadeViewModel.state.value.isOpen },
             splitGestureMode = { currentSplitMode },
             onSwipeDown = { expandQs -> shadeViewModel.open(expandQs) },
-            onBrightnessSwipe = { brightness ->
-                scope.launch(Dispatchers.IO) {
-                    brightnessRepo.set(brightness)
-                }
-            },
+            onBrightnessSwipe = { brightness -> shadeViewModel.setBrightness(brightness) },
         )
-        gestureOverlay?.attach()
+        SuperShadeAccessibilityService.isRunningFlow
+            .onEach { a11yRunning ->
+                if (a11yRunning) gestureOverlay?.detach() else gestureOverlay?.attach()
+            }
+            .launchIn(scope)
 
         // Show peek cards for new notifications when the shade panel is closed.
         notificationRepo.newNotifications

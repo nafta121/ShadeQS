@@ -51,7 +51,7 @@ class BrightnessRepository(
 
     suspend fun set(value: Int): Boolean {
         val clamped = value.coerceIn(1, 255)
-        setAutoOff()
+        if (isAuto()) setAutoOff()
         if (Settings.System.canWrite(context)) {
             return try {
                 Settings.System.putInt(

@@ -181,10 +181,10 @@ class HeadsUpOverlay(
         }
     }
 
-    /**
-     * Displays a peek card for [notification].
-     */
-    fun show(notification: ShadeNotification, autoDismissMs: Long = 4_500L) {
+    private fun showOverlayCard(
+        autoDismissMs: Long,
+        content: @Composable (isAmoled: Boolean) -> Unit,
+    ) {
         handler.post {
             dismissCurrent()
             val owner = HeadsUpLifecycleOwner()
@@ -201,63 +201,23 @@ class HeadsUpOverlay(
                     val activeDarkMode by produceState(DarkThemeMode.SYSTEM) {
                         settings?.darkThemeMode?.collect { value = it }
                     }
-
-                    val isAmoled = activeDarkMode == DarkThemeMode.AMOLED
-                    val themeWrapper: @Composable (@Composable () -> Unit) -> Unit = when (activeTheme) {
-                        ShadeTheme.Pixel -> { content -> PixelShadeTheme(isAmoled = isAmoled, content = content) }
-                        ShadeTheme.PureMaterial -> { content ->
-                            PureMaterialShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        ShadeTheme.Nothing -> { content ->
-                            NothingShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        ShadeTheme.Cyberpunk -> { content ->
-                            CyberpunkShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        else -> { content -> OneUiShadeTheme(isAmoled = isAmoled, content = content) }
+                    val activeAccent by produceState(com.supershade.settings.AccentColor.GALAXY_BLUE) {
+                        settings?.accentColor?.collect { value = it }
+                    }
+                    val activeMonetStrength by produceState(1.0f) {
+                        settings?.monetAccentStrength?.collect { value = it }
                     }
 
+                    val isAmoled = activeDarkMode == DarkThemeMode.AMOLED
                     val superHaptics = remember { SuperHaptics(context) }
-                    CompositionLocalProvider(
-                        LocalShadeTheme provides activeTheme,
-                        LocalSuperHaptics provides superHaptics,
-                    ) {
-                        themeWrapper {
-                            HeadsUpCard(
-                                notification = notification,
-                                isAmoled = isAmoled,
-                                onTap = {
-                                    try { notification.contentIntent?.send() } catch (_: Exception) {}
-                                    handler.post { dismissCurrent() }
-                                },
-                                onHide = {
-                                    handler.post { dismissCurrent() }
-                                },
-                                onDismiss = {
-                                    notificationRepo?.cancelAndRemove(notification.key)
-                                    handler.post { dismissCurrent() }
-                                },
-                                onSnooze = { durationMs ->
-                                    notificationRepo?.snooze(notification.key, durationMs)
-                                    handler.post { dismissCurrent() }
-                                },
-                                onPauseAutoDismiss = {
-                                    currentDismissToken = null
-                                    handler.removeCallbacksAndMessages(null)
-                                },
-                            )
+                    CompositionLocalProvider(LocalSuperHaptics provides superHaptics) {
+                        com.supershade.ui.theme.SuperShadeTheme(
+                            theme = activeTheme,
+                            darkThemeMode = activeDarkMode,
+                            accentColor = activeAccent,
+                            monetBlendStrength = activeMonetStrength,
+                        ) {
+                            content(isAmoled)
                         }
                     }
                 }
@@ -281,6 +241,37 @@ class HeadsUpOverlay(
     }
 
     /**
+     * Displays a peek card for [notification].
+     */
+    fun show(notification: ShadeNotification, autoDismissMs: Long = 4_500L) {
+        showOverlayCard(autoDismissMs) { isAmoled ->
+            HeadsUpCard(
+                notification = notification,
+                isAmoled = isAmoled,
+                onTap = {
+                    try { notification.contentIntent?.send() } catch (_: Exception) {}
+                    handler.post { dismissCurrent() }
+                },
+                onHide = {
+                    handler.post { dismissCurrent() }
+                },
+                onDismiss = {
+                    notificationRepo?.cancelAndRemove(notification.key)
+                    handler.post { dismissCurrent() }
+                },
+                onSnooze = { durationMs ->
+                    notificationRepo?.snooze(notification.key, durationMs)
+                    handler.post { dismissCurrent() }
+                },
+                onPauseAutoDismiss = {
+                    currentDismissToken = null
+                    handler.removeCallbacksAndMessages(null)
+                },
+            )
+        }
+    }
+
+    /**
      * Displays an ambient lockscreen/peek card for active [media].
      */
     fun showMedia(
@@ -290,89 +281,21 @@ class HeadsUpOverlay(
         onSkipPrevious: () -> Unit,
         autoDismissMs: Long = 6_000L,
     ) {
-        handler.post {
-            dismissCurrent()
-            val owner = HeadsUpLifecycleOwner()
-            currentLifecycleOwner = owner
-
-            val view = ComposeView(context).apply {
-                setViewTreeLifecycleOwner(owner)
-                setViewTreeViewModelStoreOwner(owner)
-                setViewTreeSavedStateRegistryOwner(owner)
-                setContent {
-                    val activeTheme by produceState<ShadeTheme>(ShadeTheme.OneUI) {
-                        settings?.theme?.collect { value = it }
-                    }
-                    val activeDarkMode by produceState(DarkThemeMode.SYSTEM) {
-                        settings?.darkThemeMode?.collect { value = it }
-                    }
-
-                    val isAmoled = activeDarkMode == DarkThemeMode.AMOLED
-                    val themeWrapper: @Composable (@Composable () -> Unit) -> Unit = when (activeTheme) {
-                        ShadeTheme.Pixel -> { content -> PixelShadeTheme(isAmoled = isAmoled, content = content) }
-                        ShadeTheme.PureMaterial -> { content ->
-                            PureMaterialShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        ShadeTheme.Nothing -> { content ->
-                            NothingShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        ShadeTheme.Cyberpunk -> { content ->
-                            CyberpunkShadeTheme(
-                                isAmoled = isAmoled,
-                                darkThemeMode = activeDarkMode,
-                                content = content,
-                            )
-                        }
-                        else -> { content -> OneUiShadeTheme(isAmoled = isAmoled, content = content) }
-                    }
-
-                    val superHaptics = remember { SuperHaptics(context) }
-                    CompositionLocalProvider(
-                        LocalShadeTheme provides activeTheme,
-                        LocalSuperHaptics provides superHaptics,
-                    ) {
-                        themeWrapper {
-                            AmbientMediaCard(
-                                media = media,
-                                isAmoled = isAmoled,
-                                onPlayPause = onPlayPause,
-                                onSkipNext = onSkipNext,
-                                onSkipPrevious = onSkipPrevious,
-                                onHide = {
-                                    handler.post { dismissCurrent() }
-                                },
-                                onPauseAutoDismiss = {
-                                    currentDismissToken = null
-                                    handler.removeCallbacksAndMessages(null)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-            currentView = view
-            try {
-                wm.addView(view, params)
-            } catch (_: Exception) {
-                owner.destroy()
-                currentView = null
-                currentLifecycleOwner = null
-                return@post
-            }
-
-            val token = Any()
-            currentDismissToken = token
-            handler.postDelayed({
-                if (currentDismissToken === token) dismissCurrent()
-            }, autoDismissMs)
+        showOverlayCard(autoDismissMs) { isAmoled ->
+            AmbientMediaCard(
+                media = media,
+                isAmoled = isAmoled,
+                onPlayPause = onPlayPause,
+                onSkipNext = onSkipNext,
+                onSkipPrevious = onSkipPrevious,
+                onHide = {
+                    handler.post { dismissCurrent() }
+                },
+                onPauseAutoDismiss = {
+                    currentDismissToken = null
+                    handler.removeCallbacksAndMessages(null)
+                },
+            )
         }
     }
 
