@@ -76,6 +76,7 @@ class GestureOverlay(
         if (overlayView != null) return
         var startX = 0f
         var startY = 0f
+        var activePointerId = MotionEvent.INVALID_POINTER_ID
         var triggered = false
         var isBrightnessScrubbing = false
         var lastBrightnessStep = -1
@@ -91,6 +92,7 @@ class GestureOverlay(
 
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        activePointerId = event.getPointerId(0)
                         startX = event.rawX
                         startY = event.rawY
                         triggered = false
@@ -103,11 +105,17 @@ class GestureOverlay(
                         val edgeExclusionPx = 10f * density
                         val screenWidth = context.resources.displayMetrics.widthPixels
                         if (startX < edgeExclusionPx || startX > (screenWidth - edgeExclusionPx)) {
+                            activePointerId = MotionEvent.INVALID_POINTER_ID
                             return@setOnTouchListener false
                         }
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
+                        if (activePointerId == MotionEvent.INVALID_POINTER_ID ||
+                            event.findPointerIndex(activePointerId) != 0
+                        ) {
+                            return@setOnTouchListener false
+                        }
                         velocityTracker?.addMovement(event)
                         val deltaX = kotlin.math.abs(event.rawX - startX)
                         val deltaY = event.rawY - startY
@@ -164,7 +172,16 @@ class GestureOverlay(
                         }
                         true
                     }
+                    MotionEvent.ACTION_POINTER_UP -> {
+                        val pointerIndex = event.actionIndex
+                        if (event.getPointerId(pointerIndex) == activePointerId) {
+                            activePointerId = MotionEvent.INVALID_POINTER_ID
+                            isBrightnessScrubbing = false
+                        }
+                        true
+                    }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        activePointerId = MotionEvent.INVALID_POINTER_ID
                         triggered = false
                         isBrightnessScrubbing = false
                         lastBrightnessStep = -1

@@ -151,8 +151,19 @@ class ShadeWindowManager(
         showTimestampMs = System.currentTimeMillis()
         hideJob?.cancel()
         hideJob = null
+        params.flags = params.flags and (
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            ).inv()
 
         if (overlayView != null) {
+            overlayView?.let { view ->
+                if (view.isAttachedToWindow) {
+                    try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
+                }
+            }
+            attachStatusBarBlocker()
             if (!viewModel.state.value.isOpen) {
                 viewModel.open(expandQs = expandQs)
             }
@@ -205,6 +216,10 @@ class ShadeWindowManager(
             windowManager.addView(view, params)
         } catch (e: Exception) {
             android.util.Log.e("ShadeWindowManager", "Failed to add overlay window", e)
+            overlayView = null
+            lifecycleOwner = null
+            owner.stop()
+            return
         }
         attachStatusBarBlocker()
         // Dispatch window insets to the ComposeView so statusBarsPadding() and
@@ -224,6 +239,15 @@ class ShadeWindowManager(
         viewModel.close()
         val viewToRemove = overlayView
         val ownerToStop = lifecycleOwner
+        if (viewToRemove != null && viewToRemove.isAttachedToWindow) {
+            params.flags = params.flags or
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+            try {
+                windowManager.updateViewLayout(viewToRemove, params)
+            } catch (_: Exception) {}
+        }
         hideJob = scope.launch {
             delay(260L)
             if (viewToRemove != null) {

@@ -5,6 +5,43 @@ Releases follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.9.39] — 2026-10-21
+
+### Fixed & Enhanced (120Hz Animation Phase Deferral, Swipe Left/Right Gestures, Touch Routing & Overlay Polish)
+- **Swipe Left/Right & HorizontalPager Coordination (`FluidSwipeToDismiss`, `ShadeRoot`)**:
+  - Disabled `.draggable(Orientation.Horizontal)` capture on non-clearable/pinned notification cards (`enableStartToEnd || enableEndToStart`) so horizontal swipes starting over ongoing notifications smoothly switch pages between Notifications and Quick Settings in Separate Mode.
+  - Added `!change.isConsumed` guard and `rememberUpdatedState(handleBackStep)` to the side-edge inward back gesture in `ShadeRoot` so swiping cards or scrubbing sliders near screen edges never hijacks or closes the shade, and edge-back follows the full sheet hierarchy (`PowerMenu` -> `HistorySheet` -> `TileDetail` -> `isQsExpanded` -> `Dismiss`).
+- **Smart Vertical Touch Routing & Scroll Coordination (`ShadeRoot`)**:
+  - Hoisted `togetherScrollState` and `qsScrollState` to dynamically evaluate `canScrollForward` / `canScrollBackward` during vertical drags, allowing seamless scrolling when content overflows and 1:1 vertical drag-to-close whenever at the scroll boundary or when notifications are empty.
+  - Removed conflicting `.draggable(Orientation.Vertical)` wrappers around Quick Settings grids in Together Mode in favor of unified `nestedScrollConnection` handling.
+- **Overlay Window Lifecycle & Multi-Touch Hardening (`ShadeWindowManager`, `HeadsUpOverlay`, `GestureOverlay`)**:
+  - Eliminated the 260ms post-dismiss ghost-touch window by immediately applying `FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL | FLAG_NOT_TOUCHABLE` via `updateViewLayout` when `ShadeWindowManager.hide()` begins, and cleaned up lifecycle/window references if `addView` fails.
+  - Added `VelocityTracker` and dominant-axis guards to `HeadsUpOverlay` pop-up cards for responsive horizontal fling-to-dismiss (`750dp/s`) and upward fling-to-hide (`-500dp/s`).
+  - Added `activePointerId` multi-touch tracking in `GestureOverlay` to prevent brightness scrubbing jumps when a secondary finger touches or lifts.
+- **120Hz Compose Draw-Phase Deferral & Motion Discipline (`FluidSwipeToDismiss`, `NotificationCard`, `GroupedNotificationCard`, `QuickSettingsGrid`)**:
+  - Extracted shared `SwipeDismissBackground` using `derivedStateOf`, `drawBehind`, and `graphicsLayer`, removing >250 lines of duplicate code and eliminating per-frame Composition/Layout thrashing during horizontal card swipes.
+  - Deferred bottom drag-handle width/alpha interpolation in `ShadeRoot` to `Modifier.graphicsLayer` (`scaleX` and `alpha`) to prevent full-shade recomposition on every drag frame.
+  - Tuned structural `animateContentSize` and pager springs from underdamped `DampingRatioLowBouncy` (`0.5f`) to high-precision `0.88f` damping (`stiffness = 500f`), and replaced hardcoded pixel coordinates in `LIQUID_GLASS` with proportional `drawBehind` vertical luminance.
+
+---
+
+## [1.9.38] — 2026-10-21
+
+### Fixed & Audited (Android 16 / SDK 36 Security, ANR Prevention & Compose Performance)
+- **ANR Prevention & Off-Main-Thread I/O**:
+  - Moved PackageManager label and drawable resolution off the main thread onto `Dispatchers.IO` with an in-memory `LruCache` in `HeadsUpOverlay`, `NotificationCard`, and `GroupedNotificationCard`.
+  - Moved `WallpaperManager` IPC reads off the main thread onto `Dispatchers.Default` in `DynamicColorExtractor`.
+  - Replaced blocking `Dispatchers.Main` waits during Accessibility Gesture completion with `CancellableContinuation`.
+- **Android Intent & Permission Security**:
+  - Enforced `PendingIntent.FLAG_IMMUTABLE` on notification tap launches in `ShadeViewModel` and explicit package targeting on media `PendingIntent` fallbacks.
+  - Added Shizuku permission grants check (`checkSelfPermission == PERMISSION_GRANTED`) before binding `Shizuku.bindUserService`.
+- **Compose Performance & Lifecycle**:
+  - Replaced 150+ per-card `LaunchedEffect` 60-second coroutines with a single feed-level `LocalCurrentTimeMillis` ticker in `NotificationFeed`.
+  - Deferred `ShadeRoot` scrim cosine attenuation and panel scale calculations to `drawBehind` and `graphicsLayer`.
+  - Replaced `collectAsState()` with lifecycle-aware `collectAsStateWithLifecycle()` across UI screens.
+
+---
+
 ## [1.9.37] — 2026-10-21
 
 ### Fixed & Audited (Stability, Security, Performance, Theme & Settings Polish)

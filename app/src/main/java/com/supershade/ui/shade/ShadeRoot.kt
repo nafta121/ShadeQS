@@ -19,8 +19,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -105,6 +103,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -162,13 +161,11 @@ fun ShadeRoot(
 
     val coroutineScope = rememberCoroutineScope()
     val dragOffset = remember { Animatable(0f) }
-    val horizontalPanOffset = remember { Animatable(0f) }
     val density = LocalDensity.current
     val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
     val screenHeightPx = with(density) { screenHeightDp.toPx() }.coerceAtLeast(1f)
     val dismissThresholdPx = with(density) { 96.dp.toPx() }
     val velocityThresholdPxPerSec = with(density) { 850.dp.toPx() }
-    val maxHorizontalPanPx = with(density) { 60.dp.toPx() }
 
     var openTimeMs by remember { mutableStateOf(System.currentTimeMillis()) }
     var isSettled by remember { mutableStateOf(false) }
@@ -200,8 +197,8 @@ fun ShadeRoot(
             pagerState.animateScrollToPage(
                 targetPage,
                 animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
+                    dampingRatio = 0.88f,
+                    stiffness = 480f,
                 )
             )
         }
@@ -221,7 +218,6 @@ fun ShadeRoot(
             isSettled = false
             openTimeMs = System.currentTimeMillis()
             dragOffset.snapTo(0f)
-            horizontalPanOffset.snapTo(0f)
             delay(400L)
             isSettled = true
         } else {
@@ -232,6 +228,8 @@ fun ShadeRoot(
 
     val isTogether = state.splitGestureMode.isTogether
     val activePanel = state.activePanel
+    val togetherScrollState = rememberScrollState()
+    val qsScrollState = rememberScrollState()
 
     val nestedScrollConnection = remember(isTogether, isQsExpanded, activePanel, isEditingTiles) {
         object : NestedScrollConnection {
@@ -265,7 +263,7 @@ fun ShadeRoot(
 
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 if (dragOffset.value < 0f) {
-                    dragOffset.animateTo(0f, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow))
+                    dragOffset.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
                 }
                 return Velocity.Zero
             }
@@ -278,29 +276,36 @@ fun ShadeRoot(
 
     val backdropTheme = state.backdropTheme
 
-    BackHandler(enabled = state.isOpen) {
-        if (showPowerMenu) {
-            haptics.sheetDetent()
-            showPowerMenu = false
-        } else if (state.isHistorySheetOpen) {
-            haptics.sheetDetent()
-            viewModel.closeHistorySheet()
-        } else if (state.activeTileDetail != null) {
-            viewModel.closeTileDetail()
-        } else if (isTogether && state.isQsExpanded) {
-            haptics.sheetDetent()
-            viewModel.setQsExpanded(false)
-        } else {
-            // Swallow back presses during the initial 350ms settle window to avoid
-            // closing when system shade dismissal injects a back event.
-            if (System.currentTimeMillis() - openTimeMs < 350L) return@BackHandler
-            haptics.sheetDetent()
-            coroutineScope.launch {
-                dragOffset.animateTo(-screenHeightPx, tween(180))
-                onDismiss()
+    val handleBackStep: () -> Unit = {
+        when {
+            showPowerMenu -> {
+                haptics.sheetDetent()
+                showPowerMenu = false
+            }
+            state.isHistorySheetOpen -> {
+                haptics.sheetDetent()
+                viewModel.closeHistorySheet()
+            }
+            state.activeTileDetail != null -> {
+                viewModel.closeTileDetail()
+            }
+            isTogether && state.isQsExpanded -> {
+                haptics.sheetDetent()
+                viewModel.setQsExpanded(false)
+            }
+            System.currentTimeMillis() - openTimeMs >= 350L -> {
+                haptics.sheetDetent()
+                coroutineScope.launch {
+                    dragOffset.animateTo(-screenHeightPx, tween(180))
+                    onDismiss()
+                }
             }
         }
     }
+
+    val currentHandleBackStep by rememberUpdatedState(handleBackStep)
+
+    BackHandler(enabled = state.isOpen, onBack = handleBackStep)
 
     CompositionLocalProvider(
         LocalShadeTheme provides state.theme,
@@ -394,12 +399,10 @@ fun ShadeRoot(
                                     tracker.addPosition(down.uptimeMillis, down.position)
 
                                     val isTouchInHomeBarZone = down.position.y >= (size.height - bottomHomeZonePx)
+                                    val isTouchInMiddleZone = !isTouchInHomeBarZone &&
+                                        down.position.y >= headerZonePx &&
+                                        down.position.y <= (size.height - bottomHomeZonePx)
                                     val hasNotifications = state.visibleNotifications.isNotEmpty()
-                                    // Touch is over scrollable feed only if outside top header and bottom home bar zone
-                                    val isTouchOverScrollableFeed = !isTouchInHomeBarZone &&
-                                                                    down.position.y >= headerZonePx &&
-                                                                    down.position.y <= (size.height - bottomHomeZonePx) &&
-                                                                    (hasNotifications || (isTogether && !isQsExpanded))
 
                                     while (true) {
                                         val event = awaitPointerEvent()
@@ -412,29 +415,36 @@ fun ShadeRoot(
                                         lastY = change.position.y
 
                                         // Side edge inward swipe (AOSP / One UI predictive back navigation)
-                                        // Strictly requires dominant horizontal swipe to prevent accidental trigger while scrolling
+                                        // Strictly requires dominant horizontal swipe and unconsumed event to prevent hijacking card swipes/sliders
                                         val isHorizontalDominant = kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.6f
                                         val isEdgeInwardDist = (down.position.x < edgeZonePx && dx > (42f * px)) ||
                                                                (down.position.x > (size.width - edgeZonePx) && dx < -(42f * px))
-                                        val isInwardSwipe = isHorizontalDominant && isEdgeInwardDist && kotlin.math.abs(dy) < (40f * px)
+                                        val isInwardSwipe = !change.isConsumed && isHorizontalDominant && isEdgeInwardDist && kotlin.math.abs(dy) < (40f * px)
 
                                         if (!consumed && isInwardSwipe) {
                                             change.consume()
                                             consumed = true
-                                            haptics.sheetDetent()
-                                            if (isTogether && isQsExpanded) {
-                                                coroutineScope.launch { viewModel.setQsExpanded(false) }
-                                            } else {
-                                                coroutineScope.launch {
-                                                    dragOffset.animateTo(-screenHeightPx, tween(180))
-                                                    onDismiss()
-                                                }
-                                            }
+                                            currentHandleBackStep()
                                             break
                                         }
 
+                                        val isChildScrollableInDirection = isTouchInMiddleZone && when {
+                                            isTogether -> if (dy < 0f) {
+                                                togetherScrollState.canScrollForward
+                                            } else {
+                                                togetherScrollState.canScrollBackward || !isQsExpanded
+                                            }
+                                            state.activePanel == ShadePanel.QUICK_SETTINGS -> if (dy < 0f) {
+                                                qsScrollState.canScrollForward
+                                            } else {
+                                                qsScrollState.canScrollBackward
+                                            }
+                                            else -> hasNotifications
+                                        }
+                                        val isTouchOverScrollableFeed = isChildScrollableInDirection && dragOffset.value == 0f
+
                                         // Vertical dismiss drag tracking:
-                                        // Active when touch started in bottom home zone, header zone, or empty state
+                                        // Active when touch started in bottom home zone, header zone, or unscrollable/at-edge content
                                         if (!isTouchOverScrollableFeed) {
                                             val isDominantVertical = isTouchInHomeBarZone || kotlin.math.abs(dy) > kotlin.math.abs(dx) * slopeMin
                                             if (isDominantVertical && (dy < -4f || dy > 4f || dragOffset.value != 0f)) {
@@ -479,7 +489,7 @@ fun ShadeRoot(
                                                         haptics.sheetDetent()
                                                         coroutineScope.launch {
                                                             viewModel.setQsExpanded(false)
-                                                            dragOffset.animateTo(0f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
+                                                            dragOffset.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
                                                         }
                                                     } else {
                                                         haptics.sheetDetent()
@@ -492,13 +502,9 @@ fun ShadeRoot(
                                                             onDismiss()
                                                         }
                                                     }
-                                                } else if (dragOffset.value > 0f) {
+                                                } else if (dragOffset.value != 0f) {
                                                     coroutineScope.launch {
-                                                        dragOffset.animateTo(0f, spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow))
-                                                    }
-                                                } else if (dragOffset.value < 0f) {
-                                                    coroutineScope.launch {
-                                                        dragOffset.animateTo(0f, spring(Spring.DampingRatioLowBouncy, Spring.StiffnessMediumLow))
+                                                        dragOffset.animateTo(0f, spring(dampingRatio = 0.82f, stiffness = 460f))
                                                     }
                                                 }
                                                 break
@@ -515,22 +521,19 @@ fun ShadeRoot(
                     )
  {
                         if (backdropTheme == BackdropTheme.LIQUID_GLASS) {
+                            val primaryTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.12f),
-                                                Color.White.copy(alpha = 0.03f),
-                                                Color.Transparent,
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
-                                                Color.Transparent,
-                                            ),
-                                            start = Offset.Zero,
-                                            end = Offset(1200f, 2200f),
+                                    .drawBehind {
+                                        drawRect(
+                                            brush = Brush.verticalGradient(
+                                                0.0f to Color.White.copy(alpha = 0.10f),
+                                                0.45f to Color.Transparent,
+                                                1.0f to primaryTint,
+                                            )
                                         )
-                                    ),
+                                    },
                             )
                         }
                         Column(
@@ -608,41 +611,23 @@ fun ShadeRoot(
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .nestedScroll(nestedScrollConnection)
-                                    .verticalScroll(rememberScrollState(), enabled = !isEditingTiles),
+                                    .verticalScroll(togetherScrollState, enabled = !isEditingTiles),
                                 verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 if (state.theme == ShadeTheme.Pixel) {
                                     // ── Pixel Material Expressive Layout in Together Mode ──
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .draggable(
-                                                orientation = Orientation.Vertical,
-                                                enabled = !isEditingTiles,
-                                                state = rememberDraggableState { delta ->
-                                                    if (delta > 10f && !isQsExpanded) {
-                                                        haptics.sheetDetent()
-                                                        viewModel.setQsExpanded(true)
-                                                    } else if (delta < -10f && isQsExpanded) {
-                                                        haptics.sheetDetent()
-                                                        viewModel.setQsExpanded(false)
-                                                    }
-                                                }
-                                            )
-                                    ) {
-                                        PixelQuickSettingsGrid(
-                                            tiles = state.tiles,
-                                            isExpanded = isQsExpanded,
-                                            isEditing = isEditingTiles,
-                                            onToggleEdit = { isEditingTiles = !isEditingTiles },
-                                            onMoveTile = { from, to -> viewModel.moveTile(from, to) },
-                                            onRemoveTile = { viewModel.removeTile(it) },
-                                            onAddTile = { viewModel.addTile(it) },
-                                            onResetTiles = { viewModel.resetTiles() },
-                                            onTileClick = handleTileClick,
-                                            onTileLongClick = { viewModel.openTileDetail(it) },
-                                        )
-                                    }
+                                    PixelQuickSettingsGrid(
+                                        tiles = state.tiles,
+                                        isExpanded = isQsExpanded,
+                                        isEditing = isEditingTiles,
+                                        onToggleEdit = { isEditingTiles = !isEditingTiles },
+                                        onMoveTile = { from, to -> viewModel.moveTile(from, to) },
+                                        onRemoveTile = { viewModel.removeTile(it) },
+                                        onAddTile = { viewModel.addTile(it) },
+                                        onResetTiles = { viewModel.resetTiles() },
+                                        onTileClick = handleTileClick,
+                                        onTileLongClick = { viewModel.openTileDetail(it) },
+                                    )
 
                                     PixelBrightnessSlider(
                                         brightness = state.brightness,
@@ -662,45 +647,27 @@ fun ShadeRoot(
                                     }
                                 } else {
                                     // ── One UI Layout in Together Mode ──
-                                    // Compact QS row (always visible at top, draggable to expand/collapse with spring physics)
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .draggable(
-                                                orientation = Orientation.Vertical,
-                                                enabled = !isEditingTiles,
-                                                state = rememberDraggableState { delta ->
-                                                    if (delta > 10f && !isQsExpanded) {
-                                                        haptics.sheetDetent()
-                                                        viewModel.setQsExpanded(true)
-                                                    } else if (delta < -10f && isQsExpanded) {
-                                                        haptics.sheetDetent()
-                                                        viewModel.setQsExpanded(false)
-                                                    }
-                                                }
-                                            )
-                                    ) {
-                                        QuickSettingsGrid(
-                                            tiles = state.tiles,
-                                            theme = state.theme,
-                                            isShizukuConnected = state.isShizukuConnected,
-                                            isExpanded = isQsExpanded,
-                                            tileShape = state.tileShape,
-                                            tileSize = state.tileSize,
-                                            tileColumns = state.tileColumns,
-                                            showWideCards = isQsExpanded && state.showWideCards,
-                                            isEditing = isEditingTiles,
-                                            onToggleEdit = { isEditingTiles = !isEditingTiles },
-                                            onMoveTile = { from, to -> viewModel.moveTile(from, to) },
-                                            onRemoveTile = { viewModel.removeTile(it) },
-                                            onAddTile = { viewModel.addTile(it) },
-                                            onResetTiles = { viewModel.resetTiles() },
-                                            onTileClick = handleTileClick,
-                                            onTileLongClick = { viewModel.openTileDetail(it) },
-                                            deviceControlMode = state.deviceControlMode,
-                                            onRestoreDeviceControl = { viewModel.setDeviceControlMode(com.supershade.settings.DeviceControlMode.SHOW_WHEN_EXPANDED) },
-                                        )
-                                    }
+                                    // Compact QS row (always visible at top, coordinated via nestedScrollConnection)
+                                    QuickSettingsGrid(
+                                        tiles = state.tiles,
+                                        theme = state.theme,
+                                        isShizukuConnected = state.isShizukuConnected,
+                                        isExpanded = isQsExpanded,
+                                        tileShape = state.tileShape,
+                                        tileSize = state.tileSize,
+                                        tileColumns = state.tileColumns,
+                                        showWideCards = isQsExpanded && state.showWideCards,
+                                        isEditing = isEditingTiles,
+                                        onToggleEdit = { isEditingTiles = !isEditingTiles },
+                                        onMoveTile = { from, to -> viewModel.moveTile(from, to) },
+                                        onRemoveTile = { viewModel.removeTile(it) },
+                                        onAddTile = { viewModel.addTile(it) },
+                                        onResetTiles = { viewModel.resetTiles() },
+                                        onTileClick = handleTileClick,
+                                        onTileLongClick = { viewModel.openTileDetail(it) },
+                                        deviceControlMode = state.deviceControlMode,
+                                        onRestoreDeviceControl = { viewModel.setDeviceControlMode(com.supershade.settings.DeviceControlMode.SHOW_WHEN_EXPANDED) },
+                                    )
 
                                     AnimatedVisibility(
                                         visible = (state.theme == ShadeTheme.OneUI) && (isEditingTiles || (state.deviceControlMode == com.supershade.settings.DeviceControlMode.SHOW_ALWAYS) || (state.deviceControlMode == com.supershade.settings.DeviceControlMode.SHOW_WHEN_EXPANDED && isQsExpanded)),
@@ -930,7 +897,7 @@ fun ShadeRoot(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .nestedScroll(nestedScrollConnection)
-                                        .verticalScroll(rememberScrollState()),
+                                        .verticalScroll(qsScrollState),
                                     verticalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
                                     if (state.theme == ShadeTheme.Pixel) {
@@ -1173,20 +1140,6 @@ fun ShadeRoot(
 
                         // Bottom drag-handle — swipe up to dismiss with spring physics, or tap for fast quick-close
                         var hasHandleFiredHaptic by remember { mutableStateOf(false) }
-                        val handlePullProgress = (-dragOffset.value / dismissThresholdPx).coerceIn(0f, 1.5f)
-                        val animatedHandleWidth by animateDpAsState(
-                            targetValue = (44 + 24 * handlePullProgress).dp,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow,
-                            ),
-                            label = "handleWidth",
-                        )
-                        val animatedHandleAlpha by animateFloatAsState(
-                            targetValue = (0.40f + 0.35f * handlePullProgress).coerceIn(0.40f, 0.85f),
-                            animationSpec = tween(120),
-                            label = "handleAlpha",
-                        )
 
                         Box(
                             modifier = Modifier
@@ -1244,10 +1197,15 @@ fun ShadeRoot(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .width(animatedHandleWidth)
+                                    .width(44.dp)
                                     .height(5.dp)
+                                    .graphicsLayer {
+                                        val pullProgress = (-dragOffset.value / dismissThresholdPx).coerceIn(0f, 1.5f)
+                                        scaleX = 1f + 0.54f * pullProgress
+                                        alpha = (0.40f + 0.35f * pullProgress).coerceIn(0.40f, 0.85f)
+                                    }
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = animatedHandleAlpha)),
+                                    .background(MaterialTheme.colorScheme.onSurfaceVariant),
                             )
                         }
                     }

@@ -91,6 +91,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -423,10 +424,15 @@ class HeadsUpOverlay(
                         alpha = (1f - maxDelta).coerceIn(0f, 1f)
                     }
                     .pointerInput(Unit) {
+                        val px = this.density
+                        val flingXVelocityPx = 750f * px
+                        val flingYVelocityPx = -500f * px
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false)
                             var isLongPressed = false
                             var isDragging = false
+                            val tracker = VelocityTracker()
+                            tracker.addPosition(down.uptimeMillis, down.position)
 
                             val longPressJob = scope.launch {
                                 delay(viewConfig.longPressTimeoutMillis)
@@ -441,6 +447,7 @@ class HeadsUpOverlay(
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                tracker.addPosition(change.uptimeMillis, change.position)
 
                                 if (!change.pressed) {
                                     longPressJob.cancel()
@@ -452,26 +459,29 @@ class HeadsUpOverlay(
                                     } else if (isDragging) {
                                         val dy = offsetY.value
                                         val dx = offsetX.value
-                                        if (dy < -hideThresholdPx) {
+                                        val velocity = tracker.calculateVelocity()
+                                        val isFlingUp = abs(dy) > abs(dx) && velocity.y < flingYVelocityPx && dy < -(12f * px)
+                                        val isFlingHoriz = abs(dx) >= abs(dy) && abs(velocity.x) > flingXVelocityPx && abs(dx) > (18f * px) && (dx * velocity.x > 0f)
+                                        if ((dy < -hideThresholdPx && abs(dy) > abs(dx)) || isFlingUp) {
                                             // Swipe UP to hide
                                             haptics.sheetDetent()
                                             scope.launch {
-                                                offsetY.animateTo(-600f, tween(180))
+                                                offsetY.animateTo(-600f, tween(160))
                                                 onHide()
                                             }
-                                        } else if (abs(dx) >= dismissThresholdPx) {
+                                        } else if (abs(dx) >= dismissThresholdPx || isFlingHoriz) {
                                             // Swipe LEFT/RIGHT to dismiss
                                             haptics.tileToggleOff()
                                             scope.launch {
                                                 val targetX = if (dx > 0) 1400f else -1400f
-                                                offsetX.animateTo(targetX, tween(180))
+                                                offsetX.animateTo(targetX, tween(160))
                                                 onDismiss()
                                             }
                                         } else {
-                                            // Snap back with fluid spring physics
+                                            // Snap back with controlled spring physics
                                             scope.launch {
-                                                launch { offsetX.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 400f)) }
-                                                launch { offsetY.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 400f)) }
+                                                launch { offsetX.animateTo(0f, spring(dampingRatio = 0.80f, stiffness = 460f)) }
+                                                launch { offsetY.animateTo(0f, spring(dampingRatio = 0.80f, stiffness = 460f)) }
                                             }
                                         }
                                     }

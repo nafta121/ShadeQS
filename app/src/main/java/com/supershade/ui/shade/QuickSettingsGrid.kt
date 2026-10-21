@@ -162,8 +162,8 @@ fun QuickSettingsGrid(
                 .fillMaxWidth()
                 .animateContentSize(
                     animationSpec = spring<IntSize>(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
+                        dampingRatio = 0.88f,
+                        stiffness = 500f,
                     )
                 )
                 .padding(horizontal = 10.dp, vertical = 10.dp),

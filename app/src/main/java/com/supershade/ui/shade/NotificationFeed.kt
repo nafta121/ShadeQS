@@ -999,8 +999,8 @@ fun TogetherNotificationFeed(
                     .fillMaxWidth()
                     .animateContentSize(
                         animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessMediumLow,
+                            dampingRatio = 0.88f,
+                            stiffness = 500f,
                         )
                     ),
                 verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp),

@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -211,148 +210,19 @@ fun NotificationCard(
         enableEndToStart = notification.isClearable,
         modifier = modifier.fillMaxWidth(),
         backgroundContent = {
-            val isSwiping = !swipeState.isAtRest
-            if (!isSwiping) return@FluidSwipeToDismiss
-            val currentOffset = swipeState.offsetPx
-            val alignment = if (currentOffset > 0f) Alignment.CenterStart else Alignment.CenterEnd
-            val progress = swipeState.progress
-            val isPastDismissThreshold = kotlin.math.abs(currentOffset) > swipeState.thresholdPx
-
-            val badgeScale by animateFloatAsState(
-                targetValue = if (isPastDismissThreshold) 1.08f else (0.80f + progress * 0.40f).coerceIn(0.80f, 1.0f),
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
-                label = "swipeBadgeScale",
+            SwipeDismissBackground(
+                swipeState = swipeState,
+                shadeTheme = shadeTheme,
+                isGroup = false,
+                cardShape = shapes.card,
             )
-            val iconRotation by animateFloatAsState(
-                targetValue = if (isPastDismissThreshold) 0f else if (currentOffset > 0f) -12f else 12f,
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
-                label = "swipeIconRotation",
-            )
-            val trackBgColor = when (shadeTheme) {
-                is ShadeTheme.Cyberpunk -> Color(0xFFFF0055).copy(alpha = (progress * 0.40f).coerceIn(0f, 0.35f))
-                is ShadeTheme.Nothing -> Color(0xFFD71920).copy(alpha = (progress * 0.45f).coerceIn(0f, 0.40f))
-                else -> Color(0xFFE53935).copy(alpha = (progress * 0.45f).coerceIn(0f, 0.40f))
-            }
-            val badgeColor = when (shadeTheme) {
-                is ShadeTheme.Cyberpunk -> if (isPastDismissThreshold) Color(0xFFFF0055) else Color(0xFFFF0055).copy(alpha = 0.85f)
-                is ShadeTheme.Nothing -> if (isPastDismissThreshold) Color(0xFFD71920) else Color(0xFFD71920).copy(alpha = 0.85f)
-                else -> if (isPastDismissThreshold) Color(0xFFE53935) else Color(0xFFE53935).copy(alpha = 0.85f)
-            }
-            val badgeShape = when (shadeTheme) {
-                is ShadeTheme.Cyberpunk -> ChamferedCornerShape(6.dp)
-                is ShadeTheme.Nothing -> RoundedCornerShape(8.dp)
-                is ShadeTheme.Pixel -> RoundedCornerShape(50)
-                else -> RoundedCornerShape(20.dp)
-            }
-            val badgeBorder = when (shadeTheme) {
-                is ShadeTheme.Cyberpunk -> BorderStroke(1.dp, Color(0xFFFF007F))
-                is ShadeTheme.Nothing -> BorderStroke(1.dp, Color.White.copy(alpha = 0.30f))
-                else -> null
-            }
-            val label = when (shadeTheme) {
-                is ShadeTheme.Cyberpunk -> "[PURGE]"
-                is ShadeTheme.Nothing -> "DISMISS"
-                else -> "Dismiss"
-            }
-            val icon = Icons.Default.Delete
-
-            val iconSlideOffset by animateDpAsState(
-                targetValue = if (currentOffset > 0f) {
-                    ((progress.coerceIn(0f, 0.35f) / 0.35f - 1f) * 16f).dp
-                } else {
-                    ((1f - progress.coerceIn(0f, 0.35f) / 0.35f) * 16f).dp
-                },
-                animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow),
-                label = "swipeIconSlide",
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(shapes.card)
-                    .background(trackBgColor),
-                contentAlignment = alignment,
-            ) {
-                Surface(
-                    shape = badgeShape,
-                    color = badgeColor,
-                    border = badgeBorder,
-                    shadowElevation = if (isPastDismissThreshold) 6.dp else 1.dp,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .offset(x = iconSlideOffset)
-                        .graphicsLayer {
-                            scaleX = badgeScale
-                            scaleY = badgeScale
-                        },
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (currentOffset > 0f) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .graphicsLayer { rotationZ = iconRotation },
-                            )
-                            if (progress > 0.25f) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = if (shadeTheme is ShadeTheme.Cyberpunk) FontFamily.Monospace else FontFamily.Default,
-                                        fontSize = 12.5.sp,
-                                    ),
-                                    color = Color.White,
-                                )
-                            }
-                        } else {
-                            if (progress > 0.25f) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = if (shadeTheme is ShadeTheme.Cyberpunk) FontFamily.Monospace else FontFamily.Default,
-                                        fontSize = 12.5.sp,
-                                    ),
-                                    color = Color.White,
-                                )
-                            }
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .graphicsLayer { rotationZ = iconRotation },
-                            )
-                        }
-                    }
-                }
-            }
         },
     ) {
-        val dragProgress = swipeState.progress
-        val isSwiping = !swipeState.isAtRest
-        val cardScale = (1.0f - dragProgress * 0.04f).coerceIn(0.95f, 1.0f)
-        val cardAlpha = if (dragProgress > 0.75f) (1f - (dragProgress - 0.75f) * 2.5f).coerceIn(0.4f, 1.0f) else 1.0f
-        val cardElevation = (dragProgress * 8f).dp
         val baseThemeShape = when (shadeTheme) {
             is ShadeTheme.Cyberpunk -> ChamferedCornerShape(10.dp)
             is ShadeTheme.Nothing -> RoundedCornerShape(16.dp)
             is ShadeTheme.Pixel -> RoundedCornerShape(26.dp)
             else -> shapes.card
-        }
-
-        val dynamicCardShape = if (isSwiping && dragProgress > 0.05f && baseThemeShape is RoundedCornerShape) {
-            RoundedCornerShape(24.dp + (dragProgress * 6f).dp)
-        } else {
-            baseThemeShape
         }
 
         val cardBorder = when (shadeTheme) {
@@ -370,20 +240,15 @@ fun NotificationCard(
         }
 
         Card(
-            shape = dynamicCardShape,
+            shape = baseThemeShape,
             colors = CardDefaults.cardColors(
                 containerColor = cardBg,
             ),
-            elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
             border = cardBorder,
             modifier = Modifier
                 .fillMaxWidth()
                 .animateContentSize()
-                .graphicsLayer {
-                    scaleX = cardScale
-                    scaleY = cardScale
-                    alpha = cardAlpha
-                }
                 .combinedClickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = LocalIndication.current,
