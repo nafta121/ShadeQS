@@ -48,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.supershade.haptics.LocalSuperHaptics
 import com.supershade.haptics.SuperHaptics
-import com.supershade.settings.ShadeTheme
+import com.supershade.ui.theme.ShadeTheme
 import com.supershade.ui.theme.ChamferedCornerShape
 import com.supershade.ui.theme.LocalShadeShapeScheme
 import kotlinx.coroutines.CoroutineScope
