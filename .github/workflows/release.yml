@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*.*.*'
@@ -38,7 +39,11 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.9.37"
+          fi
           VERSION="${TAG#v}"
           BUILD=$(( GITHUB_RUN_NUMBER + 1000 ))
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
@@ -89,6 +94,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: "${{ steps.version.outputs.tag }}"
           name: "SuperShade ${{ steps.version.outputs.tag }}"
           body_path: /tmp/release_notes.md
           files: "app/build/outputs/apk/release/supershade-${{ steps.version.outputs.tag }}.apk"
